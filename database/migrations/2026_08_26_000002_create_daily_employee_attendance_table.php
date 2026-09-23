@@ -10,8 +10,9 @@ return new class extends Migration
     {
         Schema::create('daily_employee_attendance', function (Blueprint $table): void {
             $table->id();
-            // بلا foreign key: الموظف موجود في قاعدة بيانات أخرى (resultsys)
-            $table->unsignedBigInteger('employee_id');
+            // بلا foreign key: الموظف موجود في قاعدة بيانات أخرى (resultsys).
+            // النوع varchar(50) باش يطابق employees.id الحقيقي (موظفين بمعرّفات نصية)
+            $table->string('employee_id', 50);
             $table->date('date');
             $table->dateTime('first_check_in')->nullable();
             $table->dateTime('last_check_out')->nullable();
