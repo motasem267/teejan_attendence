@@ -2,45 +2,50 @@
 
 namespace App\Services\Attendance;
 
-use App\Models\DailyEmployeeAttendance;
-use App\Models\Resultsys\Employee;
+use App\Models\DailyStudentAttendance;
+use App\Models\Resultsys\Student;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 
 /**
- * حضور الموظفين غير المعلمين: أول بصمة باليوم = دخول، آخر بصمة = خروج، بلا
- * مقارنة بجدول (ما فماش وقت متوقع لهذي الفئة). البصمات محلية (نفس جهاز
- * teejan_attendence)، يكتب محليا ويعكس في resultsys.
+ * حضور الطلبة: أول بصمة باليوم = دخول، آخر بصمة = خروج، من جهاز مخصص للطلبة
+ * وحدهم. البصمات محلية (نفس جهاز teejan_attendence)، يكتب محليا ويعكس في resultsys.
  */
-class DailyEmployeeAttendanceService
+class DailyStudentAttendanceService
 {
     public function processForDate(null|string|DateTimeInterface $date = null): array
     {
         $date = $this->normalizeDate($date);
         $attlog = config('attendance.attlog');
-        $receptionDevice = config('attendance.reception_device');
+        $studentDevice = config('attendance.student_device');
 
-        $employeeIds = Employee::query()
-            ->whereDoesntHave('teacherClasses')
-            ->pluck('id');
-
-        if ($employeeIds->isEmpty()) {
+        if (!$studentDevice) {
             return [
                 'date' => $date->toDateString(),
-                'employees_recorded' => 0,
+                'students_recorded' => 0,
                 'processed_logs' => 0,
             ];
         }
 
-        $employeesRecorded = 0;
+        $studentIds = Student::query()->pluck('id');
+
+        if ($studentIds->isEmpty()) {
+            return [
+                'date' => $date->toDateString(),
+                'students_recorded' => 0,
+                'processed_logs' => 0,
+            ];
+        }
+
+        $studentsRecorded = 0;
         $processedLogs = 0;
 
-        foreach ($employeeIds as $employeeId) {
+        foreach ($studentIds as $studentId) {
             $dayLogs = DB::table($attlog['table'])
-                ->where($attlog['employee_column'], $employeeId)
+                ->where($attlog['employee_column'], $studentId)
                 ->whereDate($attlog['timestamp_column'], $date->toDateString())
-                ->when($receptionDevice, fn ($query) => $query->where($attlog['device_column'], $receptionDevice))
+                ->where($attlog['device_column'], $studentDevice)
                 ->orderBy($attlog['timestamp_column'])
                 ->orderBy('id')
                 ->get();
@@ -54,8 +59,8 @@ class DailyEmployeeAttendanceService
                 ? $dayLogs->last()->{$attlog['timestamp_column']}
                 : null;
 
-            DailyEmployeeAttendance::updateOrCreate(
-                ['employee_id' => $employeeId, 'date' => $date->toDateString()],
+            DailyStudentAttendance::updateOrCreate(
+                ['student_id' => $studentId, 'date' => $date->toDateString()],
                 [
                     'first_check_in' => $firstCheckIn,
                     'last_check_out' => $lastCheckOut,
@@ -63,8 +68,8 @@ class DailyEmployeeAttendanceService
                 ],
             );
 
-            DB::connection('resultsys')->table('daily_employee_attendance')->updateOrInsert(
-                ['employee_id' => $employeeId, 'date' => $date->toDateString()],
+            DB::connection('resultsys')->table('daily_student_attendance')->updateOrInsert(
+                ['student_id' => $studentId, 'date' => $date->toDateString()],
                 [
                     'first_check_in' => $firstCheckIn,
                     'last_check_out' => $lastCheckOut,
@@ -74,7 +79,7 @@ class DailyEmployeeAttendanceService
                 ],
             );
 
-            $employeesRecorded++;
+            $studentsRecorded++;
 
             $unprocessedIds = $dayLogs
                 ->reject(fn ($log) => (int) ($log->{$attlog['processed_column']} ?? 0) === 1)
@@ -91,7 +96,7 @@ class DailyEmployeeAttendanceService
 
         return [
             'date' => $date->toDateString(),
-            'employees_recorded' => $employeesRecorded,
+            'students_recorded' => $studentsRecorded,
             'processed_logs' => $processedLogs,
         ];
     }

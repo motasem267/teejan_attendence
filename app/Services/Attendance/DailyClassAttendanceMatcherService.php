@@ -9,9 +9,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * منفذة من نفس منطق teejan_laravel_project — تقارن بصمات attlog (المقروءة من
- * resultsys) مع الـsnapshot المحلي. كل تحديث يتكتب محليا (المصدر الأساسي)
- * وفي resultsys كمرآة، وعلامة is_processed في attlog تبقى في resultsys فقط.
+ * منفذة من نفس منطق teejan_laravel_project — تقارن بصمات attlog (المحلية،
+ * نفس جهاز teejan_attendence المتصل مباشرة بجهاز البصمة) مع الـsnapshot
+ * المحلي. كل تحديث يتكتب محليا (المصدر الأساسي) وفي resultsys كمرآة، وعلامة
+ * is_processed في attlog تبقى محلية زادة (attlog ما عندهاش نسخة في resultsys).
  */
 class DailyClassAttendanceMatcherService
 {
@@ -19,6 +20,10 @@ class DailyClassAttendanceMatcherService
     {
         $date = $this->normalizeDate($date);
         $attlog = config('attendance.attlog');
+        $excludedDevices = array_filter([
+            config('attendance.reception_device'),
+            config('attendance.student_device'),
+        ]);
 
         $snapshots = DailyClassAttendance::query()
             ->whereDate('date', $date->toDateString())
@@ -37,13 +42,14 @@ class DailyClassAttendanceMatcherService
 
         $employeeIds = $snapshots->pluck('employee_id')->unique()->values();
 
-        $logs = DB::connection('resultsys')->table($attlog['table'])
+        $logs = DB::table($attlog['table'])
             ->whereIn($attlog['employee_column'], $employeeIds)
             ->whereDate($attlog['timestamp_column'], $date->toDateString())
             ->where(function ($query) use ($attlog): void {
                 $query->whereNull($attlog['processed_column'])
                     ->orWhere($attlog['processed_column'], 0);
             })
+            ->when(!empty($excludedDevices), fn ($query) => $query->whereNotIn($attlog['device_column'], $excludedDevices))
             ->orderBy($attlog['employee_column'])
             ->orderBy($attlog['timestamp_column'])
             ->orderBy('id')
@@ -178,7 +184,7 @@ class DailyClassAttendanceMatcherService
 
     protected function markLogAsProcessed(string $table, string $processedColumn, int $logId): void
     {
-        DB::connection('resultsys')->table($table)
+        DB::table($table)
             ->where('id', $logId)
             ->update([$processedColumn => 1]);
     }
