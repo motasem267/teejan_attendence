@@ -3,9 +3,6 @@
 namespace App\Filament\Widgets;
 
 use App\Models\AttendanceSetting;
-use App\Models\DailyClassAttendance;
-use App\Models\DailyEmployeeAttendance;
-use App\Models\DailyStudentAttendance;
 use App\Services\Attendance\DailyClassAttendanceDurationMatcherService;
 use App\Services\Attendance\DailyClassAttendanceMatcherService;
 use App\Services\Attendance\DailyClassAttendanceSnapshotService;
@@ -20,40 +17,11 @@ class AttendanceStatusWidget extends Widget
 
     protected int|string|array $columnSpan = 'full';
 
-    public int $completedCount = 0;
-    public int $checkedInCount = 0;
-    public int $pendingCount = 0;
-    public int $presentEmployeesCount = 0;
-    public int $presentStudentsCount = 0;
     public bool $isDurationMode = false;
 
     public function mount(): void
     {
-        $this->loadCounts();
         $this->isDurationMode = AttendanceSetting::current()->isDurationMode();
-    }
-
-    protected function loadCounts(): void
-    {
-        $today = now()->toDateString();
-
-        $classCounts = DailyClassAttendance::query()
-            ->whereDate('date', $today)
-            ->selectRaw('status, count(*) as total')
-            ->groupBy('status')
-            ->pluck('total', 'status');
-
-        $this->completedCount = (int) ($classCounts['completed'] ?? 0);
-        $this->checkedInCount = (int) ($classCounts['checked_in'] ?? 0);
-        $this->pendingCount = (int) ($classCounts['pending'] ?? 0);
-
-        $this->presentEmployeesCount = DailyEmployeeAttendance::query()
-            ->whereDate('date', $today)
-            ->count();
-
-        $this->presentStudentsCount = DailyStudentAttendance::query()
-            ->whereDate('date', $today)
-            ->count();
     }
 
     public function toggleMode(): void
@@ -102,7 +70,7 @@ class AttendanceStatusWidget extends Widget
         $employeeResult = $employeeService->processForDate();
         $studentResult = $studentService->processForDate();
 
-        $this->loadCounts();
+        $this->dispatch('attendance-synced');
 
         Notification::make()
             ->title('تمت المزامنة')
