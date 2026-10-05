@@ -29,6 +29,7 @@ class AttendancePanelProvider extends PanelProvider
             ->authGuard('web')
             ->brandName('نظام إدارة الحضور - تيجان العلم')
             ->globalSearch(false)
+            ->sidebarCollapsibleOnDesktop()
             ->colors([
                 'primary' => Color::Amber,
             ])

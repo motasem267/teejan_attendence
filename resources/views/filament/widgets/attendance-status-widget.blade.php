@@ -28,7 +28,7 @@
             </div>
 
             <div style="background: #111827; padding: 15px; border-radius: 6px; border: 1px solid #374151;">
-                <p style="color: #9ca3af; font-size: 13px; margin: 0 0 5px 0;">✗ لسه ما جاش</p>
+                <p style="color: #9ca3af; font-size: 13px; margin: 0 0 5px 0;">✗ لم يحضر بعد</p>
                 <p style="font-weight: 600; font-size: 24px; margin: 0; color: #ef4444;">{{ $pendingCount }}</p>
             </div>
 

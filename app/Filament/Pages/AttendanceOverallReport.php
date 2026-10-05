@@ -54,7 +54,7 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->summarize([Sum::make()->label('المجموع')]),
 
                 TextColumn::make('attended_sessions')
-                    ->label('حصص حاضر')
+                    ->label('حصص الحضور')
                     ->numeric()
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✓ {$state}")
@@ -62,7 +62,7 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->summarize([Sum::make()->label('المجموع')]),
 
                 TextColumn::make('absent_sessions')
-                    ->label('حصص غايب')
+                    ->label('حصص الغياب')
                     ->numeric()
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✗ {$state}")

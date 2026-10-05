@@ -3,6 +3,7 @@
 namespace App\Models\Resultsys;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Employee extends Model
@@ -30,5 +31,15 @@ class Employee extends Model
     public function teacherClasses(): HasMany
     {
         return $this->hasMany(TeacherClass::class, 'teacher_id');
+    }
+
+    public function employeeType(): BelongsTo
+    {
+        return $this->belongsTo(EmployeeType::class, 'emp_type_id');
+    }
+
+    public function status(): BelongsTo
+    {
+        return $this->belongsTo(EmployeeStatus::class, 'status_id');
     }
 }
