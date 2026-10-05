@@ -17,7 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (\Throwable $e, $request) {
             \Illuminate\Support\Facades\Log::channel('single')->error(
                 '[DEBUG-TRAP] '.get_class($e).': '.$e->getMessage(),
-                ['file' => $e->getFile().':'.$e->getLine()]
+                [
+                    'file' => $e->getFile().':'.$e->getLine(),
+                    'url' => $request->fullUrl(),
+                    'trace' => collect($e->getTrace())
+                        ->take(12)
+                        ->map(fn ($frame) => ($frame['class'] ?? '').($frame['type'] ?? '').($frame['function'] ?? '').' @ '.($frame['file'] ?? '?').':'.($frame['line'] ?? '?'))
+                        ->all(),
+                ]
             );
         });
     })->create();
