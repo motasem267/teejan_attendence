@@ -88,7 +88,7 @@ class AttendanceDetailedReport extends Page implements HasTable
                         Select::make('employee_id')
                             ->label('المعلم/ة')
                             ->options(fn () => Employee::query()
-                                ->whereHas('teacherClasses')
+                                ->teachers()
                                 ->orderBy('name')
                                 ->pluck('name', 'id'))
                             ->searchable(),

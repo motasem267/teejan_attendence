@@ -105,7 +105,7 @@ class AttendanceOverallReport extends Page implements HasTable
     protected function employeeNames(): Collection
     {
         return $this->employeeNamesCache ??= Employee::query()
-            ->whereHas('teacherClasses')
+            ->teachers()
             ->pluck('name', 'id');
     }
 
@@ -130,7 +130,7 @@ class AttendanceOverallReport extends Page implements HasTable
     public function getFilteredTableQuery(): Builder
     {
         $teacherIds = Employee::query()
-            ->whereHas('teacherClasses')
+            ->teachers()
             ->pluck('id');
 
         // كل الأعمدة تأتي من daily_class_attendance المحلية فقط — أسماء المعلمين

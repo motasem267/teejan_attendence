@@ -48,7 +48,7 @@ class EmployeesAttendanceDrilldown extends Page implements HasTable
 
     public function table(Table $table): Table
     {
-        $base = Employee::query()->with('employeeType')->whereDoesntHave('teacherClasses');
+        $base = Employee::query()->with('employeeType')->nonTeachingStaff();
 
         $query = $this->status === 'present'
             ? (clone $base)->whereIn('id', $this->presentIds)

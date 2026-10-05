@@ -95,7 +95,7 @@ class EmployeeAttendanceReport extends Page implements HasTable
     protected function employeeNames(): Collection
     {
         return $this->employeeNamesCache ??= Employee::query()
-            ->whereDoesntHave('teacherClasses')
+            ->nonTeachingStaff()
             ->orderBy('name')
             ->pluck('name', 'id');
     }

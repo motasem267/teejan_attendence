@@ -22,7 +22,7 @@ class DailyEmployeeAttendanceService
         $receptionDevice = config('attendance.reception_device');
 
         $employeeIds = Employee::query()
-            ->whereDoesntHave('teacherClasses')
+            ->nonTeachingStaff()
             ->pluck('id');
 
         if ($employeeIds->isEmpty()) {

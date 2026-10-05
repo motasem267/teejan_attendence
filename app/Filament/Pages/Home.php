@@ -17,6 +17,7 @@ class Home extends Page
     protected static string|BackedEnum|null $navigationIcon = \Filament\Support\Icons\Heroicon::OutlinedHome;
     protected static ?string $navigationLabel = 'الرئيسية';
     protected static string|UnitEnum|null $navigationGroup = null;
+    protected static ?int $navigationSort = -100;
 
     public string $selectedDate;
 
@@ -70,7 +71,7 @@ class Home extends Page
         $this->presentEmployeesCount = DailyEmployeeAttendance::query()
             ->whereDate('date', $date)
             ->count();
-        $totalEmployees = Employee::query()->whereDoesntHave('teacherClasses')->count();
+        $totalEmployees = Employee::query()->nonTeachingStaff()->count();
         $this->absentEmployeesCount = max(0, $totalEmployees - $this->presentEmployeesCount);
     }
 

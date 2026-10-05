@@ -15,7 +15,7 @@ class ReportController extends Controller
         $startDate = request('startDate');
         $endDate = request('endDate');
 
-        $teacherIds = Employee::query()->whereHas('teacherClasses')->pluck('id');
+        $teacherIds = Employee::query()->teachers()->pluck('id');
         $names = Employee::query()->whereIn('id', $teacherIds)->pluck('name', 'id');
 
         $records = $teacherIds->map(function ($employeeId) use ($startDate, $endDate, $names) {

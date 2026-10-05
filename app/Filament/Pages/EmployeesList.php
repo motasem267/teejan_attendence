@@ -22,7 +22,7 @@ class EmployeesList extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(Employee::query()->with(['employeeType', 'status']))
+            ->query(Employee::query()->with(['employeeType', 'status'])->nonTeachingStaff())
             ->columns([
                 TextColumn::make('id')
                     ->label('المعرّف')
