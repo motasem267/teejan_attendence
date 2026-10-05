@@ -5,11 +5,10 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * جدول البصمات الخام اللي iVMS-4200 يكتب فيه مباشرة (device database
- * linkage). الأسماء والنوع مطابقين لمعيار ZKTeco/Hikvision ATTLOG
- * التقليدي، ونفس أسماء الأعمدة المستعملة في config/attendance.php
- * (employeeID, checktime, deviceName, is_processed) زي ما كانت فالنظام
- * القديم المبني على SQL Server.
+ * جدول البصمات الخام اللي iVMS-4200 يكتب فيه مباشرة (Database Linkage).
+ * أسماء الأعمدة مطابقة بالضبط لـ "Third-Party Database Table Field" اللي
+ * ظاهرة في شاشة إعداد iVMS-4200 نفسها (Table Field mapping) — iVMS هو اللي
+ * يفرض هاذي الأسماء، مش نحن.
  */
 return new class extends Migration
 {
@@ -22,18 +21,17 @@ return new class extends Migration
         Schema::create('attlog', function (Blueprint $table): void {
             $table->id();
             $table->string('employeeID', 50);
-            $table->dateTime('checktime');
-            $table->string('checktype', 10)->nullable();
-            $table->integer('verifycode')->nullable();
-            $table->string('sensorid', 20)->nullable();
-            $table->string('Memoinfo', 50)->nullable();
-            $table->integer('workcode')->nullable()->default(0);
-            $table->string('sn', 20)->nullable();
-            $table->integer('UserExtFmt')->nullable();
+            $table->dateTime('authDateTime');
+            $table->date('authDate')->nullable();
+            $table->time('authTime')->nullable();
+            $table->string('direction', 20)->nullable();
             $table->string('deviceName', 100)->nullable();
+            $table->string('deviceSN', 50)->nullable();
+            $table->string('personName', 150)->nullable();
+            $table->string('cardNo', 50)->nullable();
             $table->boolean('is_processed')->default(false);
 
-            $table->index(['employeeID', 'checktime'], 'attlog_employee_checktime_index');
+            $table->index(['employeeID', 'authDateTime'], 'attlog_employee_authdatetime_index');
             $table->index('is_processed', 'attlog_is_processed_index');
             $table->index('deviceName', 'attlog_device_name_index');
         });

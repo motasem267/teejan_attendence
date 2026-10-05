@@ -9,7 +9,7 @@ return [
     'attlog' => [
         'table' => 'attlog',
         'employee_column' => 'employeeID',
-        'timestamp_column' => 'checktime',
+        'timestamp_column' => 'authDateTime',
         'processed_column' => 'is_processed',
         'device_column' => 'deviceName',
     ],
