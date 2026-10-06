@@ -10,10 +10,12 @@
             >
         </div>
 
-        {{-- مزامنة الحضور --}}
-        <div style="margin-top: 0;">
-            @livewire(\App\Filament\Widgets\AttendanceStatusWidget::class, ['date' => $selectedDate])
-        </div>
+        {{-- اختصار لصفحة المزامنة --}}
+        <a href="{{ \App\Filament\Pages\SyncAttendance::getUrl() }}"
+           style="display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 20px; text-decoration: none; box-shadow: 0 1px 2px rgba(0,0,0,.04);">
+            <span style="color: #111827; font-weight: 600; font-size: 15px;">🔄 مزامنة بيانات الحضور</span>
+            <span style="color: #6b7280; font-size: 13px;">اذهب لصفحة المزامنة ←</span>
+        </a>
 
         {{-- المعلمون --}}
         <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04);">

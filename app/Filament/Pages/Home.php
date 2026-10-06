@@ -9,7 +9,6 @@ use App\Models\Resultsys\Employee;
 use App\Models\Resultsys\Student;
 use BackedEnum;
 use Filament\Pages\Page;
-use Livewire\Attributes\On;
 use UnitEnum;
 
 class Home extends Page
@@ -38,13 +37,6 @@ class Home extends Page
     }
 
     public function updatedSelectedDate(): void
-    {
-        $this->loadCounts();
-        $this->dispatch('date-changed', date: $this->selectedDate);
-    }
-
-    #[On('attendance-synced')]
-    public function refreshCounts(): void
     {
         $this->loadCounts();
     }
