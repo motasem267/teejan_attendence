@@ -12,6 +12,7 @@ class AttendanceSyncLog extends Model
         'date',
         'mode',
         'employees_recorded',
+        'teachers_reception_recorded',
         'students_recorded',
         'class_summary',
         'processed_logs',

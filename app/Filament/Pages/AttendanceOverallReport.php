@@ -7,6 +7,7 @@ use App\Models\Resultsys\Employee;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
@@ -28,6 +29,7 @@ class AttendanceOverallReport extends Page implements HasTable
 
     public ?string $startDate = null;
     public ?string $endDate = null;
+    public ?string $selectedEmployeeId = null;
 
     protected ?Collection $employeeNamesCache = null;
 
@@ -86,11 +88,24 @@ class AttendanceOverallReport extends Page implements HasTable
                     }),
             ])
             ->filters([
+                Filter::make('employee_filter')
+                    ->label('اختر المعلم/ة')
+                    ->form([
+                        Select::make('employee_id')
+                            ->label('المعلم/ة')
+                            ->options(fn () => $this->employeeNames())
+                            ->searchable(),
+                    ])
+                    ->query(function ($query, array $data) {
+                        $this->selectedEmployeeId = $data['employee_id'] ?? null;
+                        return $query;
+                    }),
+
                 Filter::make('date_range')
                     ->label('نطاق التاريخ')
                     ->form([
-                        DatePicker::make('start_date')->label('من التاريخ'),
-                        DatePicker::make('end_date')->label('إلى التاريخ'),
+                        DatePicker::make('start_date')->label('من التاريخ')->default(fn () => $this->startDate),
+                        DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
                     ])
                     ->query(function ($query, array $data) {
                         $this->startDate = $data['start_date'] ?? null;
@@ -138,6 +153,7 @@ class AttendanceOverallReport extends Page implements HasTable
         // ولا يمكن عمل JOIN حقيقي بين قاعدتين منفصلتين.
         return DailyClassAttendance::query()
             ->whereIn('employee_id', $teacherIds)
+            ->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId))
             ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
             ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
             ->selectRaw(

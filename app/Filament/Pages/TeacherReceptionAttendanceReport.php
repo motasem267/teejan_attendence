@@ -2,7 +2,7 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\DailyEmployeeAttendance;
+use App\Models\DailyTeacherReceptionAttendance;
 use App\Models\Resultsys\Employee;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -21,19 +21,24 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
-class EmployeeAttendanceReport extends Page implements HasTable
+/**
+ * حضور المعلمين من جهاز الاستقبال (Reception) — نفس شكل تقرير حضور
+ * الموظفين بالضبط، بس مصدر البيانات DailyTeacherReceptionAttendance
+ * وقائمة الأسماء Employee::teachers().
+ */
+class TeacherReceptionAttendanceReport extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected static string|BackedEnum|null $navigationIcon = \Filament\Support\Icons\Heroicon::OutlinedUsers;
-    protected static ?string $navigationLabel = 'تقرير حضور الموظفين';
+    protected static string|BackedEnum|null $navigationIcon = \Filament\Support\Icons\Heroicon::OutlinedClock;
+    protected static ?string $navigationLabel = 'تقرير حضور المعلمين (الاستقبال)';
     protected static string|UnitEnum|null $navigationGroup = null;
 
-    public ?int $selectedEmployeeId = null;
+    public ?string $selectedEmployeeId = null;
     public ?string $startDate = null;
     public ?string $endDate = null;
 
-    protected ?Collection $employeeNamesCache = null;
+    protected ?Collection $teacherNamesCache = null;
 
     public function mount(): void
     {
@@ -52,8 +57,8 @@ class EmployeeAttendanceReport extends Page implements HasTable
                     ->sortable(),
 
                 TextColumn::make('employee_id')
-                    ->label('الموظف')
-                    ->formatStateUsing(fn ($state) => $this->employeeNames()->get($state) ?? '-'),
+                    ->label('المعلم/ة')
+                    ->formatStateUsing(fn ($state) => $this->teacherNames()->get($state) ?? '-'),
 
                 TextColumn::make('first_check_in')
                     ->label('أول دخول')
@@ -66,11 +71,11 @@ class EmployeeAttendanceReport extends Page implements HasTable
             ])
             ->filters([
                 Filter::make('employee_filter')
-                    ->label('اختر الموظف')
+                    ->label('اختر المعلم/ة')
                     ->form([
                         Select::make('employee_id')
-                            ->label('الموظف')
-                            ->options(fn () => $this->employeeNames())
+                            ->label('المعلم/ة')
+                            ->options(fn () => $this->teacherNames())
                             ->searchable(),
                     ])
                     ->query(function ($query, array $data) {
@@ -104,8 +109,8 @@ class EmployeeAttendanceReport extends Page implements HasTable
                 ->icon('heroicon-o-plus')
                 ->form([
                     Select::make('employee_id')
-                        ->label('الموظف')
-                        ->options(fn () => $this->employeeNames())
+                        ->label('المعلم/ة')
+                        ->options(fn () => $this->teacherNames())
                         ->searchable()
                         ->required(),
 
@@ -124,7 +129,7 @@ class EmployeeAttendanceReport extends Page implements HasTable
                         ->seconds(false),
                 ])
                 ->action(function (array $data): void {
-                    DailyEmployeeAttendance::updateOrCreate(
+                    DailyTeacherReceptionAttendance::updateOrCreate(
                         ['employee_id' => $data['employee_id'], 'date' => $data['date']],
                         [
                             'first_check_in' => $data['first_check_in'],
@@ -133,7 +138,7 @@ class EmployeeAttendanceReport extends Page implements HasTable
                         ],
                     );
 
-                    DB::connection('resultsys')->table('daily_employee_attendance')->updateOrInsert(
+                    DB::connection('resultsys')->table('daily_teacher_reception_attendance')->updateOrInsert(
                         ['employee_id' => $data['employee_id'], 'date' => $data['date']],
                         [
                             'first_check_in' => $data['first_check_in'],
@@ -152,17 +157,17 @@ class EmployeeAttendanceReport extends Page implements HasTable
         ];
     }
 
-    protected function employeeNames(): Collection
+    protected function teacherNames(): Collection
     {
-        return $this->employeeNamesCache ??= Employee::query()
-            ->nonTeachingStaff()
+        return $this->teacherNamesCache ??= Employee::query()
+            ->teachers()
             ->orderBy('name')
             ->pluck('name', 'id');
     }
 
     public function getFilteredTableQuery(): Builder
     {
-        return DailyEmployeeAttendance::query()
+        return DailyTeacherReceptionAttendance::query()
             ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
             ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
             ->orderBy('date', 'desc');
@@ -170,11 +175,11 @@ class EmployeeAttendanceReport extends Page implements HasTable
 
     public function getView(): string
     {
-        return 'filament.pages.employee-attendance-report';
+        return 'filament.pages.teacher-reception-attendance-report';
     }
 
     public function getTitle(): string
     {
-        return 'تقرير حضور الموظفين';
+        return 'تقرير حضور المعلمين من جهاز الاستقبال';
     }
 }

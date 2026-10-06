@@ -9,6 +9,7 @@ use App\Services\Attendance\DailyClassAttendanceMatcherService;
 use App\Services\Attendance\DailyClassAttendanceSnapshotService;
 use App\Services\Attendance\DailyEmployeeAttendanceService;
 use App\Services\Attendance\DailyStudentAttendanceService;
+use App\Services\Attendance\DailyTeacherReceptionAttendanceService;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
@@ -86,6 +87,7 @@ class SyncAttendance extends Page implements HasForms, HasTable
         DailyClassAttendanceDurationMatcherService $durationMatcherService,
         DailyEmployeeAttendanceService $employeeService,
         DailyStudentAttendanceService $studentService,
+        DailyTeacherReceptionAttendanceService $teacherReceptionService,
     ): void {
         $state = $this->form->getState();
         $from = CarbonImmutable::parse($state['from_date']);
@@ -115,7 +117,7 @@ class SyncAttendance extends Page implements HasForms, HasTable
             }
 
             try {
-                $this->syncDate($dateString, $snapshotService, $matcherService, $durationMatcherService, $employeeService, $studentService);
+                $this->syncDate($dateString, $snapshotService, $matcherService, $durationMatcherService, $employeeService, $studentService, $teacherReceptionService);
                 $syncedDates[] = $dateString;
             } catch (Throwable $e) {
                 // يوم وحيد فيه مشكلة ماخاصوش يوقف باقي النطاق — نسجل ونكمل.
@@ -157,6 +159,7 @@ class SyncAttendance extends Page implements HasForms, HasTable
         DailyClassAttendanceDurationMatcherService $durationMatcherService,
         DailyEmployeeAttendanceService $employeeService,
         DailyStudentAttendanceService $studentService,
+        DailyTeacherReceptionAttendanceService $teacherReceptionService,
     ): void {
         $mode = AttendanceSetting::current();
 
@@ -181,15 +184,17 @@ class SyncAttendance extends Page implements HasForms, HasTable
 
         $employeeResult = $employeeService->processForDate($dateString);
         $studentResult = $studentService->processForDate($dateString);
+        $teacherReceptionResult = $teacherReceptionService->processForDate($dateString);
 
         AttendanceSyncLog::updateOrCreate(
             ['date' => $dateString],
             [
                 'mode' => $mode->teacher_matching_mode,
                 'employees_recorded' => $employeeResult['employees_recorded'],
+                'teachers_reception_recorded' => $teacherReceptionResult['teachers_recorded'],
                 'students_recorded' => $studentResult['students_recorded'],
                 'class_summary' => $classSummary,
-                'processed_logs' => $classProcessedLogs + $employeeResult['processed_logs'] + $studentResult['processed_logs'],
+                'processed_logs' => $classProcessedLogs + $employeeResult['processed_logs'] + $studentResult['processed_logs'] + $teacherReceptionResult['processed_logs'],
                 'synced_at' => now(),
             ],
         );
@@ -202,11 +207,12 @@ class SyncAttendance extends Page implements HasForms, HasTable
         DailyClassAttendanceDurationMatcherService $durationMatcherService,
         DailyEmployeeAttendanceService $employeeService,
         DailyStudentAttendanceService $studentService,
+        DailyTeacherReceptionAttendanceService $teacherReceptionService,
     ): void {
         $dateString = $record->date->toDateString();
 
         try {
-            $this->syncDate($dateString, $snapshotService, $matcherService, $durationMatcherService, $employeeService, $studentService);
+            $this->syncDate($dateString, $snapshotService, $matcherService, $durationMatcherService, $employeeService, $studentService, $teacherReceptionService);
 
             Notification::make()
                 ->title('تمت إعادة المزامنة')
@@ -247,6 +253,9 @@ class SyncAttendance extends Page implements HasForms, HasTable
 
                 TextColumn::make('employees_recorded')
                     ->label('موظفين مسجلين'),
+
+                TextColumn::make('teachers_reception_recorded')
+                    ->label('معلمين (استقبال)'),
 
                 TextColumn::make('students_recorded')
                     ->label('طلبة مسجلين'),

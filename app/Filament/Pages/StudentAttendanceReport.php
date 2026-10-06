@@ -81,8 +81,8 @@ class StudentAttendanceReport extends Page implements HasTable
                 Filter::make('date_range')
                     ->label('نطاق التاريخ')
                     ->form([
-                        DatePicker::make('start_date')->label('من التاريخ'),
-                        DatePicker::make('end_date')->label('إلى التاريخ'),
+                        DatePicker::make('start_date')->label('من التاريخ')->default(fn () => $this->startDate),
+                        DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
                     ])
                     ->query(function ($query, array $data) {
                         $this->startDate = $data['start_date'] ?? null;
