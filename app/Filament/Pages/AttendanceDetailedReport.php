@@ -99,7 +99,7 @@ class AttendanceDetailedReport extends Page implements HasTable
                     ])
                     ->query(function ($query, array $data) {
                         $this->selectedEmployeeId = $data['employee_id'] ?? null;
-                        return $query;
+                        return $query->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId));
                     }),
 
                 Filter::make('date_range')
@@ -222,15 +222,11 @@ class AttendanceDetailedReport extends Page implements HasTable
 
     public function getFilteredTableQuery(): Builder
     {
-        $query = DailyClassAttendance::query();
-
-        if ($this->selectedEmployeeId) {
-            $query->where('employee_id', $this->selectedEmployeeId);
-        }
-
-        return $query
-            ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
-            ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
+        // الفلترة الفعلية (المعلم + نطاق التاريخ) تتعمل من جوا ->query() متاع
+        // كل Filter نفسه، مش هنا — تطبيقها هنا زادة يخلق فلترة مزدوجة متضاربة
+        // (قيمة $this->startDate وقت بناء هذا الكويري القاعدي لسه قديمة، قبل
+        // ما الـ Filter يحدثها بالقيمة الجديدة المختارة).
+        return DailyClassAttendance::query()
             ->orderBy('date', 'desc')
             ->orderBy('start_time', 'desc');
     }

@@ -162,10 +162,9 @@ class EmployeeAttendanceReport extends Page implements HasTable
 
     public function getFilteredTableQuery(): Builder
     {
-        return DailyEmployeeAttendance::query()
-            ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
-            ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
-            ->orderBy('date', 'desc');
+        // الفلترة (الموظف + نطاق التاريخ) تتعمل من جوا ->query() متاع كل Filter
+        // نفسه — تكرارها هنا يخلق فلترة مزدوجة بقيمة قديمة لـ $this->startDate.
+        return DailyEmployeeAttendance::query()->orderBy('date', 'desc');
     }
 
     public function getView(): string

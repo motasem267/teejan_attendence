@@ -98,7 +98,7 @@ class AttendanceOverallReport extends Page implements HasTable
                     ])
                     ->query(function ($query, array $data) {
                         $this->selectedEmployeeId = $data['employee_id'] ?? null;
-                        return $query;
+                        return $query->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId));
                     }),
 
                 Filter::make('date_range')
@@ -110,7 +110,9 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->query(function ($query, array $data) {
                         $this->startDate = $data['start_date'] ?? null;
                         $this->endDate = $data['end_date'] ?? null;
-                        return $query;
+                        return $query
+                            ->when($data['start_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '>=', $date))
+                            ->when($data['end_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '<=', $date));
                     }),
             ])
             ->defaultSort('employee_id')
@@ -151,11 +153,11 @@ class AttendanceOverallReport extends Page implements HasTable
         // كل الأعمدة تأتي من daily_class_attendance المحلية فقط — أسماء المعلمين
         // تُحل عبر employeeNames() لأنها في اتصال قاعدة بيانات مختلف (resultsys)،
         // ولا يمكن عمل JOIN حقيقي بين قاعدتين منفصلتين.
+        // الفلترة الفعلية (المعلم + نطاق التاريخ) تتعمل من جوا ->query() متاع
+        // كل Filter نفسه (يشوف أحدث $data مباشرة)، مش هنا — تكرارها هنا يخلق
+        // فلترة مزدوجة بقيمة قديمة لـ $this->startDate/selectedEmployeeId.
         return DailyClassAttendance::query()
             ->whereIn('employee_id', $teacherIds)
-            ->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId))
-            ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
-            ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
             ->selectRaw(
                 'employee_id as id,
                 employee_id,
