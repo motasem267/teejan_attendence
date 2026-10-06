@@ -3,6 +3,7 @@
 namespace App\Services\Attendance;
 
 use App\Models\DailyClassAttendance;
+use App\Models\Resultsys\Employee;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Database\QueryException;
@@ -14,6 +15,10 @@ use Illuminate\Support\Facades\Log;
  * SQL Server — تجمع أي بصمتين متتاليات على نفس الجهاز بينهم مدة معقولة
  * (15-80 دقيقة افتراضيا) كحصة وحدة، بلا أي مقارنة بالجدول الدراسي خالص.
  * تُستعمل بس لما يكون نمط "الجلسات الزمنية" مفعّل في AttendanceSetting.
+ *
+ * التعرّف على "معلم" يكون بمعرّفه (employeeID موجود في Employee::teachers())،
+ * مش باسم الجهاز — جهاز الاستقبال (Reception) بس يُستثنى (موظفين عاديين)،
+ * باقي الأجهزة كلها مقبولة بلا شرط اسم.
  */
 class DailyClassAttendanceDurationMatcherService
 {
@@ -21,13 +26,20 @@ class DailyClassAttendanceDurationMatcherService
     {
         $date = $this->normalizeDate($date);
         $attlog = config('attendance.attlog');
-        $excludedDevices = array_filter([
-            config('attendance.reception_device'),
-            config('attendance.student_device'),
-        ]);
+        $receptionDevice = config('attendance.reception_device');
+        $teacherIds = Employee::query()->teachers()->pluck('id');
         $minMinutes = (int) config('attendance.duration_matching.min_minutes', 15);
         $maxMinutes = (int) config('attendance.duration_matching.max_minutes', 80);
         $graceMinutes = (int) config('attendance.duration_matching.grace_minutes', 2);
+
+        if ($teacherIds->isEmpty()) {
+            return [
+                'date' => $date->toDateString(),
+                'matched_sessions' => 0,
+                'processed_logs' => 0,
+                'unmatched_logs' => 0,
+            ];
+        }
 
         $logs = DB::connection($attlog['connection'])->table($attlog['table'])
             ->whereDate($attlog['timestamp_column'], $date->toDateString())
@@ -35,7 +47,8 @@ class DailyClassAttendanceDurationMatcherService
                 $query->whereNull($attlog['processed_column'])
                     ->orWhere($attlog['processed_column'], 0);
             })
-            ->when(!empty($excludedDevices), fn ($query) => $query->whereNotIn($attlog['device_column'], $excludedDevices))
+            ->whereIn($attlog['employee_column'], $teacherIds)
+            ->when($receptionDevice, fn ($query) => $query->where($attlog['device_column'], '!=', $receptionDevice))
             ->orderBy($attlog['employee_column'])
             ->orderBy($attlog['timestamp_column'])
             ->orderBy('id')

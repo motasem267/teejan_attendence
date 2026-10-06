@@ -11,8 +11,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * حضور الطلبة: أول بصمة باليوم = دخول، آخر بصمة = خروج، من جهاز مخصص للطلبة
- * وحدهم. البصمات محلية (نفس جهاز teejan_attendence)، يكتب محليا ويعكس في resultsys.
+ * حضور الطلبة: أول بصمة باليوم = دخول، آخر بصمة = خروج. يتعرّف على بصمة
+ * الطالب بمعرّفه (employeeID) فقط — بلا أي شرط على اسم الجهاز، لأن الهوية
+ * الحقيقية هي رقم الطالب نفسه، مش الجهاز اللي بصم عليه. البصمات محلية
+ * (نفس جهاز teejan_attendence)، يكتب محليا ويعكس في resultsys.
  */
 class DailyStudentAttendanceService
 {
@@ -20,15 +22,6 @@ class DailyStudentAttendanceService
     {
         $date = $this->normalizeDate($date);
         $attlog = config('attendance.attlog');
-        $studentDevice = config('attendance.student_device');
-
-        if (!$studentDevice) {
-            return [
-                'date' => $date->toDateString(),
-                'students_recorded' => 0,
-                'processed_logs' => 0,
-            ];
-        }
 
         $studentIds = Student::query()->pluck('id');
 
@@ -47,7 +40,6 @@ class DailyStudentAttendanceService
             $dayLogs = DB::connection($attlog['connection'])->table($attlog['table'])
                 ->where($attlog['employee_column'], $studentId)
                 ->whereDate($attlog['timestamp_column'], $date->toDateString())
-                ->where($attlog['device_column'], $studentDevice)
                 ->orderBy($attlog['timestamp_column'])
                 ->orderBy('id')
                 ->get();

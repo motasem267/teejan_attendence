@@ -22,10 +22,7 @@ class DailyClassAttendanceMatcherService
     {
         $date = $this->normalizeDate($date);
         $attlog = config('attendance.attlog');
-        $excludedDevices = array_filter([
-            config('attendance.reception_device'),
-            config('attendance.student_device'),
-        ]);
+        $receptionDevice = config('attendance.reception_device');
 
         $snapshots = DailyClassAttendance::query()
             ->whereDate('date', $date->toDateString())
@@ -51,7 +48,7 @@ class DailyClassAttendanceMatcherService
                 $query->whereNull($attlog['processed_column'])
                     ->orWhere($attlog['processed_column'], 0);
             })
-            ->when(!empty($excludedDevices), fn ($query) => $query->whereNotIn($attlog['device_column'], $excludedDevices))
+            ->when($receptionDevice, fn ($query) => $query->where($attlog['device_column'], '!=', $receptionDevice))
             ->orderBy($attlog['employee_column'])
             ->orderBy($attlog['timestamp_column'])
             ->orderBy('id')
