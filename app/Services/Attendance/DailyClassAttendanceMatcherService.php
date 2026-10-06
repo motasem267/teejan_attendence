@@ -42,7 +42,7 @@ class DailyClassAttendanceMatcherService
 
         $employeeIds = $snapshots->pluck('employee_id')->unique()->values();
 
-        $logs = DB::table($attlog['table'])
+        $logs = DB::connection($attlog['connection'])->table($attlog['table'])
             ->whereIn($attlog['employee_column'], $employeeIds)
             ->whereDate($attlog['timestamp_column'], $date->toDateString())
             ->where(function ($query) use ($attlog): void {
@@ -80,7 +80,7 @@ class DailyClassAttendanceMatcherService
 
                     if ($checkInMatch !== null) {
                         $this->markSnapshotCheckIn($snapshot, $checkInMatch['timestamp']);
-                        $this->markLogAsProcessed($attlog['table'], $attlog['processed_column'], $checkInMatch['id']);
+                        $this->markLogAsProcessed($attlog['connection'], $attlog['table'], $attlog['processed_column'], $checkInMatch['id']);
 
                         $matchedCheckIns++;
                         $processedLogs++;
@@ -99,7 +99,7 @@ class DailyClassAttendanceMatcherService
 
                     if ($checkOutMatch !== null) {
                         $this->markSnapshotCheckOut($snapshot, $checkOutMatch['timestamp']);
-                        $this->markLogAsProcessed($attlog['table'], $attlog['processed_column'], $checkOutMatch['id']);
+                        $this->markLogAsProcessed($attlog['connection'], $attlog['table'], $attlog['processed_column'], $checkOutMatch['id']);
 
                         $matchedCheckOuts++;
                         $processedLogs++;
@@ -182,9 +182,9 @@ class DailyClassAttendanceMatcherService
         );
     }
 
-    protected function markLogAsProcessed(string $table, string $processedColumn, int $logId): void
+    protected function markLogAsProcessed(string $connection, string $table, string $processedColumn, int $logId): void
     {
-        DB::table($table)
+        DB::connection($connection)->table($table)
             ->where('id', $logId)
             ->update([$processedColumn => 1]);
     }

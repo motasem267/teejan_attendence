@@ -42,7 +42,7 @@ class DailyStudentAttendanceService
         $processedLogs = 0;
 
         foreach ($studentIds as $studentId) {
-            $dayLogs = DB::table($attlog['table'])
+            $dayLogs = DB::connection($attlog['connection'])->table($attlog['table'])
                 ->where($attlog['employee_column'], $studentId)
                 ->whereDate($attlog['timestamp_column'], $date->toDateString())
                 ->where($attlog['device_column'], $studentDevice)
@@ -86,7 +86,7 @@ class DailyStudentAttendanceService
                 ->pluck('id');
 
             if ($unprocessedIds->isNotEmpty()) {
-                DB::table($attlog['table'])
+                DB::connection($attlog['connection'])->table($attlog['table'])
                     ->whereIn('id', $unprocessedIds)
                     ->update([$attlog['processed_column'] => 1]);
 

@@ -27,7 +27,7 @@ class DailyClassAttendanceDurationMatcherService
         $maxMinutes = (int) config('attendance.duration_matching.max_minutes', 80);
         $graceMinutes = (int) config('attendance.duration_matching.grace_minutes', 2);
 
-        $logs = DB::table($attlog['table'])
+        $logs = DB::connection($attlog['connection'])->table($attlog['table'])
             ->whereDate($attlog['timestamp_column'], $date->toDateString())
             ->where(function ($query) use ($attlog): void {
                 $query->whereNull($attlog['processed_column'])
@@ -122,7 +122,7 @@ class DailyClassAttendanceDurationMatcherService
 
                 $this->mirrorToResultsys((string) $employeeId, $date->toDateString(), $currentTime, $exitTime);
 
-                DB::table($attlog['table'])
+                DB::connection($attlog['connection'])->table($attlog['table'])
                     ->whereIn('id', [$current->id, $exitLog->id])
                     ->update([$attlog['processed_column'] => 1]);
 

@@ -83,6 +83,23 @@ return [
             'engine' => null,
         ],
 
+        // اتصال بالـ attlog الحقيقي — SQL Server على نفس الجهاز الفيزيائي (جهاز
+        // الويندوز نفسه اللي يشغل WSL)، iVMS-4200 يكتب فيه مباشرة. ماشي نفس
+        // اتصال MySQL المحلي (ذاك لجداولنا الخاصة: daily_class_attendance وغيرها).
+        'attlog_sqlserver' => [
+            'driver' => 'sqlsrv',
+            'host' => env('ATTLOG_DB_HOST', '127.0.0.1'),
+            'port' => env('ATTLOG_DB_PORT', '1433'),
+            'database' => env('ATTLOG_DB_DATABASE', 'teejanAlilemManagment'),
+            'username' => env('ATTLOG_DB_USERNAME', 'sa'),
+            'password' => env('ATTLOG_DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('ATTLOG_DB_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('ATTLOG_DB_TRUST_SERVER_CERTIFICATE', 'true'),
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

@@ -5,12 +5,14 @@ return [
     // عن هذا التطبيق، متوصل بيه عبر الشبكة المحلية للمدرسة (مش نفس الجهاز)
     'resultsys_connection' => 'resultsys',
 
-    // جدول attlog محلي (نفس جهاز teejan_attendence، هو المتصل مباشرة بجهاز البصمة)
+    // جدول attlog الحقيقي موجود في SQL Server (نفس الجهاز الفيزيائي، iVMS-4200
+    // يكتب فيه مباشرة) — connection منفصل عن المحلي (MySQL) اللي فيه جداولنا
     'attlog' => [
+        'connection' => env('ATTLOG_CONNECTION', 'attlog_sqlserver'),
         'table' => 'attlog',
         'employee_column' => 'employeeID',
         'timestamp_column' => 'authDateTime',
-        'processed_column' => 'is_processed',
+        'processed_column' => 'IsSynced',
         'device_column' => 'deviceName',
     ],
 
