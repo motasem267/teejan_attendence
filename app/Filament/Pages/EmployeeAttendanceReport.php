@@ -5,8 +5,11 @@ namespace App\Filament\Pages;
 use App\Models\DailyEmployeeAttendance;
 use App\Models\Resultsys\Employee;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -15,6 +18,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
 class EmployeeAttendanceReport extends Page implements HasTable
@@ -90,6 +94,62 @@ class EmployeeAttendanceReport extends Page implements HasTable
             ])
             ->defaultSort('date', 'desc')
             ->striped();
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('addManualRecord')
+                ->label('إضافة سجل حضور يدوي')
+                ->icon('heroicon-o-plus')
+                ->form([
+                    Select::make('employee_id')
+                        ->label('الموظف')
+                        ->options(fn () => $this->employeeNames())
+                        ->searchable()
+                        ->required(),
+
+                    DatePicker::make('date')
+                        ->label('التاريخ')
+                        ->default(now())
+                        ->required(),
+
+                    DateTimePicker::make('first_check_in')
+                        ->label('أول دخول')
+                        ->seconds(false)
+                        ->required(),
+
+                    DateTimePicker::make('last_check_out')
+                        ->label('آخر خروج')
+                        ->seconds(false),
+                ])
+                ->action(function (array $data): void {
+                    DailyEmployeeAttendance::updateOrCreate(
+                        ['employee_id' => $data['employee_id'], 'date' => $data['date']],
+                        [
+                            'first_check_in' => $data['first_check_in'],
+                            'last_check_out' => $data['last_check_out'] ?? null,
+                            'status' => 'present',
+                        ],
+                    );
+
+                    DB::connection('resultsys')->table('daily_employee_attendance')->updateOrInsert(
+                        ['employee_id' => $data['employee_id'], 'date' => $data['date']],
+                        [
+                            'first_check_in' => $data['first_check_in'],
+                            'last_check_out' => $data['last_check_out'] ?? null,
+                            'status' => 'present',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ],
+                    );
+
+                    Notification::make()
+                        ->title('تمت إضافة السجل')
+                        ->success()
+                        ->send();
+                }),
+        ];
     }
 
     protected function employeeNames(): Collection

@@ -7,7 +7,10 @@ use App\Models\Resultsys\Employee;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TimePicker;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -15,6 +18,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
 class AttendanceDetailedReport extends Page implements HasTable
@@ -124,6 +128,82 @@ class AttendanceDetailedReport extends Page implements HasTable
                 ->icon('heroicon-o-document')
                 ->action('downloadPdf')
                 ->disabled(fn () => !$this->selectedEmployeeId),
+
+            Action::make('addManualRecord')
+                ->label('إضافة سجل حضور يدوي')
+                ->icon('heroicon-o-plus')
+                ->form([
+                    Select::make('employee_id')
+                        ->label('المعلم/ة')
+                        ->options(fn () => Employee::query()
+                            ->teachers()
+                            ->orderBy('name')
+                            ->pluck('name', 'id'))
+                        ->searchable()
+                        ->required(),
+
+                    DatePicker::make('date')
+                        ->label('التاريخ')
+                        ->default(now())
+                        ->required(),
+
+                    TimePicker::make('start_time')
+                        ->label('بداية الحصة')
+                        ->seconds(false)
+                        ->required(),
+
+                    TimePicker::make('end_time')
+                        ->label('نهاية الحصة')
+                        ->seconds(false)
+                        ->required(),
+
+                    Select::make('status')
+                        ->label('الحالة')
+                        ->options([
+                            'completed' => 'حاضر',
+                            'checked_in' => 'حاضر جزئي (دخول بلا خروج)',
+                            'pending' => 'غايب',
+                        ])
+                        ->default('completed')
+                        ->required()
+                        ->reactive(),
+
+                    DateTimePicker::make('check_in_at')
+                        ->label('وقت الدخول')
+                        ->seconds(false)
+                        ->visible(fn ($get) => $get('status') !== 'pending'),
+
+                    DateTimePicker::make('check_out_at')
+                        ->label('وقت الخروج')
+                        ->seconds(false)
+                        ->visible(fn ($get) => $get('status') === 'completed'),
+                ])
+                ->action(function (array $data): void {
+                    $values = [
+                        'status' => $data['status'],
+                        'check_in_at' => $data['status'] !== 'pending' ? ($data['check_in_at'] ?? null) : null,
+                        'check_out_at' => $data['status'] === 'completed' ? ($data['check_out_at'] ?? null) : null,
+                    ];
+
+                    $keys = [
+                        'employee_id' => $data['employee_id'],
+                        'date' => $data['date'],
+                        'start_time' => $data['start_time'],
+                        'end_time' => $data['end_time'],
+                    ];
+
+                    DailyClassAttendance::updateOrCreate($keys, $values);
+
+                    DB::connection('resultsys')->table('daily_class_attendance')->updateOrInsert(
+                        $keys,
+                        [...$values, 'created_at' => now(), 'updated_at' => now()],
+                    );
+
+                    Notification::make()
+                        ->title('تمت إضافة السجل')
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 
