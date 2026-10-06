@@ -12,7 +12,7 @@
 
         {{-- مزامنة الحضور --}}
         <div style="margin-top: 0;">
-            @livewire(\App\Filament\Widgets\AttendanceStatusWidget::class)
+            @livewire(\App\Filament\Widgets\AttendanceStatusWidget::class, ['date' => $selectedDate])
         </div>
 
         {{-- المعلمون --}}

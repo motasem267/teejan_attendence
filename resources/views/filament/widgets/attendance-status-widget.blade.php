@@ -9,7 +9,7 @@
                     نمط المطابقة: {{ $isDurationMode ? 'الجلسات الزمنية' : 'الجدول الدراسي' }}
                 </x-filament::button>
                 <x-filament::button wire:click="syncNow" icon="heroicon-o-arrow-path">
-                    مزامنة الحضور الآن
+                    مزامنة حضور يوم {{ $date }}
                 </x-filament::button>
             </div>
         </div>
