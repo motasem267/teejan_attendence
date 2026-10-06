@@ -19,7 +19,6 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Schema;
-use Filament\Tables\Actions\Action as TableAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -192,7 +191,7 @@ class SyncAttendance extends Page implements HasForms, HasTable
             ])
             ->defaultSort('date', 'desc')
             ->actions([
-                TableAction::make('resync')
+                Action::make('resync')
                     ->label('إعادة مزامنة')
                     ->icon('heroicon-o-arrow-path')
                     ->color('danger')
