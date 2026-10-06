@@ -5,7 +5,9 @@ namespace App\Services\Attendance;
 use App\Models\DailyClassAttendance;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * منفذة من نفس منطق sp_GetTeacherSessions (T-SQL) اللي كان يشتغل قبل على
@@ -146,19 +148,30 @@ class DailyClassAttendanceDurationMatcherService
 
     protected function mirrorToResultsys(string $employeeId, string $date, CarbonImmutable $checkIn, CarbonImmutable $checkOut): void
     {
-        DB::connection('resultsys')->table('daily_class_attendance')->updateOrInsert(
-            [
+        try {
+            DB::connection('resultsys')->table('daily_class_attendance')->updateOrInsert(
+                [
+                    'employee_id' => $employeeId,
+                    'date' => $date,
+                    'start_time' => $checkIn->format('H:i:s'),
+                    'end_time' => $checkOut->format('H:i:s'),
+                ],
+                [
+                    'check_in_at' => $checkIn->toDateTimeString(),
+                    'check_out_at' => $checkOut->toDateTimeString(),
+                    'status' => config('attendance.statuses.completed', 'completed'),
+                ],
+            );
+        } catch (QueryException $e) {
+            // غالبا employeeID مش معرّف في resultsys.employees (بصمة لكارت
+            // مش مسجل كموظف حقيقي) — ما نوقفش المزامنة كاملة بسبب صف وحيد.
+            // النسخة المحلية (المصدر الأساسي) محفوظة فعلا قبل هاذي الدالة.
+            Log::warning('فشلت مزامنة حصة معلم لـ resultsys (employee_id غير موجود هناك على الأرجح)', [
                 'employee_id' => $employeeId,
                 'date' => $date,
-                'start_time' => $checkIn->format('H:i:s'),
-                'end_time' => $checkOut->format('H:i:s'),
-            ],
-            [
-                'check_in_at' => $checkIn->toDateTimeString(),
-                'check_out_at' => $checkOut->toDateTimeString(),
-                'status' => config('attendance.statuses.completed', 'completed'),
-            ],
-        );
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function normalizeDate(null|string|DateTimeInterface $date): CarbonImmutable

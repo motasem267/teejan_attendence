@@ -6,7 +6,9 @@ use App\Models\DailyEmployeeAttendance;
 use App\Models\Resultsys\Employee;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * حضور الموظفين غير المعلمين: أول بصمة باليوم = دخول، آخر بصمة = خروج، بلا
@@ -63,16 +65,24 @@ class DailyEmployeeAttendanceService
                 ],
             );
 
-            DB::connection('resultsys')->table('daily_employee_attendance')->updateOrInsert(
-                ['employee_id' => $employeeId, 'date' => $date->toDateString()],
-                [
-                    'first_check_in' => $firstCheckIn,
-                    'last_check_out' => $lastCheckOut,
-                    'status' => 'present',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ],
-            );
+            try {
+                DB::connection('resultsys')->table('daily_employee_attendance')->updateOrInsert(
+                    ['employee_id' => $employeeId, 'date' => $date->toDateString()],
+                    [
+                        'first_check_in' => $firstCheckIn,
+                        'last_check_out' => $lastCheckOut,
+                        'status' => 'present',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                );
+            } catch (QueryException $e) {
+                Log::warning('فشلت مزامنة حضور موظف لـ resultsys', [
+                    'employee_id' => $employeeId,
+                    'date' => $date->toDateString(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             $employeesRecorded++;
 

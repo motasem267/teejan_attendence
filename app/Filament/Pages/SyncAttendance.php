@@ -23,6 +23,8 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 use UnitEnum;
 
 class SyncAttendance extends Page implements HasForms, HasTable
@@ -103,6 +105,7 @@ class SyncAttendance extends Page implements HasForms, HasTable
         $mode = AttendanceSetting::current();
         $syncedDates = [];
         $skippedDates = [];
+        $failedDates = [];
 
         foreach (CarbonPeriod::create($from, $to) as $date) {
             $dateString = $date->toDateString();
@@ -112,39 +115,48 @@ class SyncAttendance extends Page implements HasForms, HasTable
                 continue;
             }
 
-            if ($mode->isDurationMode()) {
-                $classResult = $durationMatcherService->processForDate($dateString);
-                $classSummary = sprintf(
-                    'حصص متطابقة (جلسات): %d، بلا تطابق: %d',
-                    $classResult['matched_sessions'],
-                    $classResult['unmatched_logs'],
-                );
-                $classProcessedLogs = $classResult['processed_logs'];
-            } else {
-                $snapshotService->generateForDate($dateString);
-                $classResult = $matcherService->processForDate($dateString);
-                $classSummary = sprintf(
-                    'دخول: %d، خروج: %d (جدول)',
-                    $classResult['matched_check_ins'],
-                    $classResult['matched_check_outs'],
-                );
-                $classProcessedLogs = $classResult['processed_logs'];
+            try {
+                if ($mode->isDurationMode()) {
+                    $classResult = $durationMatcherService->processForDate($dateString);
+                    $classSummary = sprintf(
+                        'حصص متطابقة (جلسات): %d، بلا تطابق: %d',
+                        $classResult['matched_sessions'],
+                        $classResult['unmatched_logs'],
+                    );
+                    $classProcessedLogs = $classResult['processed_logs'];
+                } else {
+                    $snapshotService->generateForDate($dateString);
+                    $classResult = $matcherService->processForDate($dateString);
+                    $classSummary = sprintf(
+                        'دخول: %d، خروج: %d (جدول)',
+                        $classResult['matched_check_ins'],
+                        $classResult['matched_check_outs'],
+                    );
+                    $classProcessedLogs = $classResult['processed_logs'];
+                }
+
+                $employeeResult = $employeeService->processForDate($dateString);
+                $studentResult = $studentService->processForDate($dateString);
+
+                AttendanceSyncLog::create([
+                    'date' => $dateString,
+                    'mode' => $mode->teacher_matching_mode,
+                    'employees_recorded' => $employeeResult['employees_recorded'],
+                    'students_recorded' => $studentResult['students_recorded'],
+                    'class_summary' => $classSummary,
+                    'processed_logs' => $classProcessedLogs + $employeeResult['processed_logs'] + $studentResult['processed_logs'],
+                    'synced_at' => now(),
+                ]);
+
+                $syncedDates[] = $dateString;
+            } catch (Throwable $e) {
+                // يوم وحيد فيه مشكلة ماخاصوش يوقف باقي النطاق — نسجل ونكمل.
+                Log::error('فشلت مزامنة يوم كامل', [
+                    'date' => $dateString,
+                    'error' => $e->getMessage(),
+                ]);
+                $failedDates[] = $dateString;
             }
-
-            $employeeResult = $employeeService->processForDate($dateString);
-            $studentResult = $studentService->processForDate($dateString);
-
-            AttendanceSyncLog::create([
-                'date' => $dateString,
-                'mode' => $mode->teacher_matching_mode,
-                'employees_recorded' => $employeeResult['employees_recorded'],
-                'students_recorded' => $studentResult['students_recorded'],
-                'class_summary' => $classSummary,
-                'processed_logs' => $classProcessedLogs + $employeeResult['processed_logs'] + $studentResult['processed_logs'],
-                'synced_at' => now(),
-            ]);
-
-            $syncedDates[] = $dateString;
         }
 
         $this->resetTable();
@@ -153,12 +165,17 @@ class SyncAttendance extends Page implements HasForms, HasTable
         if (!empty($skippedDates)) {
             $body .= sprintf(' تم تخطي %d يوم (مزامنين من قبل): %s', count($skippedDates), implode('، ', $skippedDates));
         }
+        if (!empty($failedDates)) {
+            $body .= sprintf(' فشلت مزامنة %d يوم (شوف اللوق): %s', count($failedDates), implode('، ', $failedDates));
+        }
 
-        Notification::make()
+        $notification = Notification::make()
             ->title('انتهت المزامنة')
-            ->body($body)
-            ->success()
-            ->send();
+            ->body($body);
+
+        empty($failedDates) ? $notification->success() : $notification->warning();
+
+        $notification->send();
     }
 
     public function table(Table $table): Table

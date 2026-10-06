@@ -5,8 +5,10 @@ namespace App\Services\Attendance;
 use App\Models\DailyClassAttendance;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * منفذة من نفس منطق teejan_laravel_project — تقارن بصمات attlog (المحلية،
@@ -171,15 +173,25 @@ class DailyClassAttendanceMatcherService
 
     protected function mirrorToResultsys(DailyClassAttendance $snapshot, array $values): void
     {
-        DB::connection('resultsys')->table('daily_class_attendance')->updateOrInsert(
-            [
+        try {
+            DB::connection('resultsys')->table('daily_class_attendance')->updateOrInsert(
+                [
+                    'employee_id' => $snapshot->employee_id,
+                    'date' => $snapshot->date->toDateString(),
+                    'start_time' => $snapshot->start_time,
+                    'end_time' => $snapshot->end_time,
+                ],
+                $values,
+            );
+        } catch (QueryException $e) {
+            // غالبا employeeID مش معرّف في resultsys.employees — ما نوقفش
+            // المزامنة كاملة بسبب صف وحيد. النسخة المحلية محفوظة فعلا.
+            Log::warning('فشلت مزامنة حصة معلم لـ resultsys (employee_id غير موجود هناك على الأرجح)', [
                 'employee_id' => $snapshot->employee_id,
                 'date' => $snapshot->date->toDateString(),
-                'start_time' => $snapshot->start_time,
-                'end_time' => $snapshot->end_time,
-            ],
-            $values,
-        );
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function markLogAsProcessed(string $connection, string $table, string $processedColumn, int $logId): void

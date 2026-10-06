@@ -6,7 +6,9 @@ use App\Models\DailyStudentAttendance;
 use App\Models\Resultsys\Student;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * حضور الطلبة: أول بصمة باليوم = دخول، آخر بصمة = خروج، من جهاز مخصص للطلبة
@@ -68,16 +70,24 @@ class DailyStudentAttendanceService
                 ],
             );
 
-            DB::connection('resultsys')->table('daily_student_attendance')->updateOrInsert(
-                ['student_id' => $studentId, 'date' => $date->toDateString()],
-                [
-                    'first_check_in' => $firstCheckIn,
-                    'last_check_out' => $lastCheckOut,
-                    'status' => 'present',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ],
-            );
+            try {
+                DB::connection('resultsys')->table('daily_student_attendance')->updateOrInsert(
+                    ['student_id' => $studentId, 'date' => $date->toDateString()],
+                    [
+                        'first_check_in' => $firstCheckIn,
+                        'last_check_out' => $lastCheckOut,
+                        'status' => 'present',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                );
+            } catch (QueryException $e) {
+                Log::warning('فشلت مزامنة حضور طالب لـ resultsys', [
+                    'student_id' => $studentId,
+                    'date' => $date->toDateString(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             $studentsRecorded++;
 
