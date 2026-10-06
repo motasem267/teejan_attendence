@@ -102,7 +102,6 @@ class SyncAttendance extends Page implements HasForms, HasTable
         }
 
         $alreadySynced = AttendanceSyncLog::alreadySyncedDates($from->toDateString(), $to->toDateString());
-        $mode = AttendanceSetting::current();
         $syncedDates = [];
         $skippedDates = [];
         $failedDates = [];
@@ -116,38 +115,7 @@ class SyncAttendance extends Page implements HasForms, HasTable
             }
 
             try {
-                if ($mode->isDurationMode()) {
-                    $classResult = $durationMatcherService->processForDate($dateString);
-                    $classSummary = sprintf(
-                        'حصص متطابقة (جلسات): %d، بلا تطابق: %d',
-                        $classResult['matched_sessions'],
-                        $classResult['unmatched_logs'],
-                    );
-                    $classProcessedLogs = $classResult['processed_logs'];
-                } else {
-                    $snapshotService->generateForDate($dateString);
-                    $classResult = $matcherService->processForDate($dateString);
-                    $classSummary = sprintf(
-                        'دخول: %d، خروج: %d (جدول)',
-                        $classResult['matched_check_ins'],
-                        $classResult['matched_check_outs'],
-                    );
-                    $classProcessedLogs = $classResult['processed_logs'];
-                }
-
-                $employeeResult = $employeeService->processForDate($dateString);
-                $studentResult = $studentService->processForDate($dateString);
-
-                AttendanceSyncLog::create([
-                    'date' => $dateString,
-                    'mode' => $mode->teacher_matching_mode,
-                    'employees_recorded' => $employeeResult['employees_recorded'],
-                    'students_recorded' => $studentResult['students_recorded'],
-                    'class_summary' => $classSummary,
-                    'processed_logs' => $classProcessedLogs + $employeeResult['processed_logs'] + $studentResult['processed_logs'],
-                    'synced_at' => now(),
-                ]);
-
+                $this->syncDate($dateString, $snapshotService, $matcherService, $durationMatcherService, $employeeService, $studentService);
                 $syncedDates[] = $dateString;
             } catch (Throwable $e) {
                 // يوم وحيد فيه مشكلة ماخاصوش يوقف باقي النطاق — نسجل ونكمل.
@@ -176,6 +144,87 @@ class SyncAttendance extends Page implements HasForms, HasTable
         empty($failedDates) ? $notification->success() : $notification->warning();
 
         $notification->send();
+    }
+
+    /**
+     * يزامن يوم وحيد فعليا (يشغل كل الخدمات) ويسجل/يحدّث صف AttendanceSyncLog
+     * المطابق. مستعملة من syncRange() وزر "إعادة مزامنة" في الجدول.
+     */
+    protected function syncDate(
+        string $dateString,
+        DailyClassAttendanceSnapshotService $snapshotService,
+        DailyClassAttendanceMatcherService $matcherService,
+        DailyClassAttendanceDurationMatcherService $durationMatcherService,
+        DailyEmployeeAttendanceService $employeeService,
+        DailyStudentAttendanceService $studentService,
+    ): void {
+        $mode = AttendanceSetting::current();
+
+        if ($mode->isDurationMode()) {
+            $classResult = $durationMatcherService->processForDate($dateString);
+            $classSummary = sprintf(
+                'حصص متطابقة (جلسات): %d، بلا تطابق: %d',
+                $classResult['matched_sessions'],
+                $classResult['unmatched_logs'],
+            );
+            $classProcessedLogs = $classResult['processed_logs'];
+        } else {
+            $snapshotService->generateForDate($dateString);
+            $classResult = $matcherService->processForDate($dateString);
+            $classSummary = sprintf(
+                'دخول: %d، خروج: %d (جدول)',
+                $classResult['matched_check_ins'],
+                $classResult['matched_check_outs'],
+            );
+            $classProcessedLogs = $classResult['processed_logs'];
+        }
+
+        $employeeResult = $employeeService->processForDate($dateString);
+        $studentResult = $studentService->processForDate($dateString);
+
+        AttendanceSyncLog::updateOrCreate(
+            ['date' => $dateString],
+            [
+                'mode' => $mode->teacher_matching_mode,
+                'employees_recorded' => $employeeResult['employees_recorded'],
+                'students_recorded' => $studentResult['students_recorded'],
+                'class_summary' => $classSummary,
+                'processed_logs' => $classProcessedLogs + $employeeResult['processed_logs'] + $studentResult['processed_logs'],
+                'synced_at' => now(),
+            ],
+        );
+    }
+
+    public function resyncDate(
+        AttendanceSyncLog $record,
+        DailyClassAttendanceSnapshotService $snapshotService,
+        DailyClassAttendanceMatcherService $matcherService,
+        DailyClassAttendanceDurationMatcherService $durationMatcherService,
+        DailyEmployeeAttendanceService $employeeService,
+        DailyStudentAttendanceService $studentService,
+    ): void {
+        $dateString = $record->date->toDateString();
+
+        try {
+            $this->syncDate($dateString, $snapshotService, $matcherService, $durationMatcherService, $employeeService, $studentService);
+
+            Notification::make()
+                ->title('تمت إعادة المزامنة')
+                ->body('اليوم '.$dateString.' اتزامن من جديد بنجاح.')
+                ->success()
+                ->send();
+        } catch (Throwable $e) {
+            Log::error('فشلت إعادة مزامنة يوم', [
+                'date' => $dateString,
+                'error' => $e->getMessage(),
+            ]);
+
+            Notification::make()
+                ->title('فشلت إعادة المزامنة')
+                ->body('شوف اللوق لتفاصيل الخطأ.')
+                ->danger()
+                ->send();
+        }
     }
 
     public function table(Table $table): Table
@@ -213,16 +262,8 @@ class SyncAttendance extends Page implements HasForms, HasTable
                     ->icon('heroicon-o-arrow-path')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalDescription('هذا يحذف سجل المزامنة الحالي لهذا اليوم ويسمح بإعادة مزامنته من جديد. استعملها بس لو متأكد.')
-                    ->action(function (AttendanceSyncLog $record): void {
-                        $record->delete();
-
-                        Notification::make()
-                            ->title('تم حذف سجل المزامنة')
-                            ->body('اليوم ' . $record->date->toDateString() . ' توا يقدر يتزامن من جديد.')
-                            ->success()
-                            ->send();
-                    }),
+                    ->modalDescription('هذا يعيد تشغيل المزامنة فعليا لهذا اليوم (يقرا attlog من جديد ويحدث النتائج). استعملها بس لو متأكد.')
+                    ->action('resyncDate'),
             ])
             ->striped();
     }
