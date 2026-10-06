@@ -41,7 +41,7 @@ class DailyStudentAttendanceService
                 ->where($attlog['employee_column'], $studentId)
                 ->whereDate($attlog['timestamp_column'], $date->toDateString())
                 ->orderBy($attlog['timestamp_column'])
-                ->orderBy('id')
+                ->orderBy($attlog['id_column'])
                 ->get();
 
             if ($dayLogs->isEmpty()) {
@@ -85,11 +85,11 @@ class DailyStudentAttendanceService
 
             $unprocessedIds = $dayLogs
                 ->reject(fn ($log) => (int) ($log->{$attlog['processed_column']} ?? 0) === 1)
-                ->pluck('id');
+                ->pluck($attlog['id_column']);
 
             if ($unprocessedIds->isNotEmpty()) {
                 DB::connection($attlog['connection'])->table($attlog['table'])
-                    ->whereIn('id', $unprocessedIds)
+                    ->whereIn($attlog['id_column'], $unprocessedIds)
                     ->update([$attlog['processed_column'] => 1]);
 
                 $processedLogs += $unprocessedIds->count();

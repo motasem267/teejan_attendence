@@ -10,6 +10,8 @@ return [
     'attlog' => [
         'connection' => env('ATTLOG_CONNECTION', 'attlog_sqlserver'),
         'table' => 'attlog',
+        // SQL Server, عمود المفتاح الأساسي فعليا اسمه "ID" (حروف كبيرة)، مش "id"
+        'id_column' => 'ID',
         'employee_column' => 'employeeID',
         'timestamp_column' => 'authDateTime',
         'processed_column' => 'IsSynced',

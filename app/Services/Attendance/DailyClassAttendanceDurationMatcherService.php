@@ -51,7 +51,7 @@ class DailyClassAttendanceDurationMatcherService
             ->when($receptionDevice, fn ($query) => $query->where($attlog['device_column'], '!=', $receptionDevice))
             ->orderBy($attlog['employee_column'])
             ->orderBy($attlog['timestamp_column'])
-            ->orderBy('id')
+            ->orderBy($attlog['id_column'])
             ->get();
 
         if ($logs->isEmpty()) {
@@ -138,7 +138,7 @@ class DailyClassAttendanceDurationMatcherService
                 $this->mirrorToResultsys((string) $employeeId, $date->toDateString(), $currentTime, $exitTime);
 
                 DB::connection($attlog['connection'])->table($attlog['table'])
-                    ->whereIn('id', [$current->id, $exitLog->id])
+                    ->whereIn($attlog['id_column'], [$current->{$attlog['id_column']}, $exitLog->{$attlog['id_column']}])
                     ->update([$attlog['processed_column'] => 1]);
 
                 $used[$i] = true;

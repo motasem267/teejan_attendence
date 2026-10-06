@@ -51,7 +51,7 @@ class DailyClassAttendanceMatcherService
             ->when($receptionDevice, fn ($query) => $query->where($attlog['device_column'], '!=', $receptionDevice))
             ->orderBy($attlog['employee_column'])
             ->orderBy($attlog['timestamp_column'])
-            ->orderBy('id')
+            ->orderBy($attlog['id_column'])
             ->get();
 
         $groupedLogs = $logs->groupBy($attlog['employee_column']);
@@ -75,11 +75,12 @@ class DailyClassAttendanceMatcherService
                         lowerBound: CarbonImmutable::parse($date->toDateString() . ' ' . $snapshot->start_time)->subMinutes((int) config('attendance.windows.check_in_before_minutes', 20)),
                         upperBound: CarbonImmutable::parse($date->toDateString() . ' ' . $snapshot->start_time)->addMinutes((int) config('attendance.windows.check_in_after_minutes', 15)),
                         timestampColumn: $attlog['timestamp_column'],
+                        idColumn: $attlog['id_column'],
                     );
 
                     if ($checkInMatch !== null) {
                         $this->markSnapshotCheckIn($snapshot, $checkInMatch['timestamp']);
-                        $this->markLogAsProcessed($attlog['connection'], $attlog['table'], $attlog['processed_column'], $checkInMatch['id']);
+                        $this->markLogAsProcessed($attlog['connection'], $attlog['table'], $attlog['id_column'], $attlog['processed_column'], $checkInMatch['id']);
 
                         $matchedCheckIns++;
                         $processedLogs++;
@@ -94,11 +95,12 @@ class DailyClassAttendanceMatcherService
                         lowerBound: CarbonImmutable::parse($date->toDateString() . ' ' . $snapshot->end_time)->subMinutes((int) config('attendance.windows.check_out_before_minutes', 5)),
                         upperBound: CarbonImmutable::parse($date->toDateString() . ' ' . $snapshot->end_time)->addMinutes((int) config('attendance.windows.check_out_after_minutes', 20)),
                         timestampColumn: $attlog['timestamp_column'],
+                        idColumn: $attlog['id_column'],
                     );
 
                     if ($checkOutMatch !== null) {
                         $this->markSnapshotCheckOut($snapshot, $checkOutMatch['timestamp']);
-                        $this->markLogAsProcessed($attlog['connection'], $attlog['table'], $attlog['processed_column'], $checkOutMatch['id']);
+                        $this->markLogAsProcessed($attlog['connection'], $attlog['table'], $attlog['id_column'], $attlog['processed_column'], $checkOutMatch['id']);
 
                         $matchedCheckOuts++;
                         $processedLogs++;
@@ -120,7 +122,7 @@ class DailyClassAttendanceMatcherService
      * @param  Collection<int, object>  $logs
      * @return array{id:int,index:int,timestamp:string}|null
      */
-    protected function matchLog(Collection $logs, int $startIndex, CarbonImmutable $lowerBound, CarbonImmutable $upperBound, string $timestampColumn): ?array
+    protected function matchLog(Collection $logs, int $startIndex, CarbonImmutable $lowerBound, CarbonImmutable $upperBound, string $timestampColumn, string $idColumn): ?array
     {
         for ($index = $startIndex; $index < $logs->count(); $index++) {
             $log = $logs->get($index);
@@ -135,7 +137,7 @@ class DailyClassAttendanceMatcherService
             }
 
             return [
-                'id' => $log->id,
+                'id' => $log->{$idColumn},
                 'index' => $index,
                 'timestamp' => $timestamp->toDateTimeString(),
             ];
@@ -191,10 +193,10 @@ class DailyClassAttendanceMatcherService
         }
     }
 
-    protected function markLogAsProcessed(string $connection, string $table, string $processedColumn, int $logId): void
+    protected function markLogAsProcessed(string $connection, string $table, string $idColumn, string $processedColumn, int $logId): void
     {
         DB::connection($connection)->table($table)
-            ->where('id', $logId)
+            ->where($idColumn, $logId)
             ->update([$processedColumn => 1]);
     }
 
