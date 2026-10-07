@@ -13,6 +13,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Filament\Tables\Columns\Summarizers\Sum;
+use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -56,7 +57,13 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->label('إجمالي وعاء الحصص (الجدول الدراسي)')
                     ->state(fn ($record) => $this->totalScheduledSessions($record->employee_id))
                     ->numeric(locale: 'en')
-                    ->color('gray'),
+                    ->color('gray')
+                    ->summarize([
+                        Summarizer::make()
+                            ->label('المجموع')
+                            ->using(fn ($query) => $query->get()->sum(fn ($row) => $this->totalScheduledSessions($row->employee_id)))
+                            ->numeric(locale: 'en'),
+                    ]),
 
                 TextColumn::make('total_sessions')
                     ->label('إجمالي الحصص')
@@ -70,7 +77,13 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✓ {$state}")
-                    ->color('success'),
+                    ->color('success')
+                    ->summarize([
+                        Summarizer::make()
+                            ->label('المجموع')
+                            ->using(fn ($query) => $query->get()->sum('total_sessions'))
+                            ->numeric(locale: 'en'),
+                    ]),
 
                 TextColumn::make('absent_sessions')
                     ->label('حصص الغياب')
@@ -78,7 +91,13 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✗ {$state}")
-                    ->color('danger'),
+                    ->color('danger')
+                    ->summarize([
+                        Summarizer::make()
+                            ->label('المجموع')
+                            ->using(fn ($query) => $query->get()->sum(fn ($row) => max(0, $this->totalScheduledSessions($row->employee_id) - $row->total_sessions)))
+                            ->numeric(locale: 'en'),
+                    ]),
 
                 TextColumn::make('attendance_percentage')
                     ->label('نسبة الحضور %')
@@ -107,7 +126,11 @@ class AttendanceOverallReport extends Page implements HasTable
                             ->searchable(),
                     ])
                     ->query(function ($query, array $data) {
-                        $this->selectedEmployeeId = $data['employee_id'] ?? null;
+                        // استعمل القيمة السابقة لو هذا الفلتر بالذات ماشي هو
+                        // اللي اتفعّل توا (Filament يعاود ينفذ كل الفلاتر مع
+                        // كل تحديث، حتى اللي ماتلمستهاش، و$data يطلع فاضي
+                        // لهم) — ?? null هنا كان يصفّر القيمة غلط فأي تفاعل.
+                        $this->selectedEmployeeId = array_key_exists('employee_id', $data) ? $data['employee_id'] : $this->selectedEmployeeId;
                         return $query->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId));
                     }),
 
@@ -118,15 +141,17 @@ class AttendanceOverallReport extends Page implements HasTable
                         DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
                     ])
                     ->query(function ($query, array $data) {
-                        $this->startDate = $data['start_date'] ?? null;
-                        $this->endDate = $data['end_date'] ?? null;
+                        $this->startDate = array_key_exists('start_date', $data) ? $data['start_date'] : $this->startDate;
+                        $this->endDate = array_key_exists('end_date', $data) ? $data['end_date'] : $this->endDate;
                         return $query
-                            ->when($data['start_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '>=', $date))
-                            ->when($data['end_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '<=', $date));
+                            ->when($this->startDate, fn ($q, $date) => $q->whereDate('date', '>=', $date))
+                            ->when($this->endDate, fn ($q, $date) => $q->whereDate('date', '<=', $date));
                     }),
             ])
             ->defaultSort('employee_id')
             ->defaultKeySort(false)
+            ->modelLabel('حصة')
+            ->pluralModelLabel('الحصص')
             ->striped();
     }
 

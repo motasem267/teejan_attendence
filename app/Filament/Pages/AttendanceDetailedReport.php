@@ -106,7 +106,7 @@ class AttendanceDetailedReport extends Page implements HasTable
                             ->searchable(),
                     ])
                     ->query(function ($query, array $data) {
-                        $this->selectedEmployeeId = $data['employee_id'] ?? null;
+                        $this->selectedEmployeeId = array_key_exists('employee_id', $data) ? $data['employee_id'] : $this->selectedEmployeeId;
                         return $query->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId));
                     }),
 
@@ -117,11 +117,11 @@ class AttendanceDetailedReport extends Page implements HasTable
                         DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
                     ])
                     ->query(function ($query, array $data) {
-                        $this->startDate = $data['start_date'] ?? null;
-                        $this->endDate = $data['end_date'] ?? null;
+                        $this->startDate = array_key_exists('start_date', $data) ? $data['start_date'] : $this->startDate;
+                        $this->endDate = array_key_exists('end_date', $data) ? $data['end_date'] : $this->endDate;
                         return $query
-                            ->when($data['start_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '>=', $date))
-                            ->when($data['end_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '<=', $date));
+                            ->when($this->startDate, fn ($q, $date) => $q->whereDate('date', '>=', $date))
+                            ->when($this->endDate, fn ($q, $date) => $q->whereDate('date', '<=', $date));
                     }),
             ])
             ->defaultSort('date', 'desc')

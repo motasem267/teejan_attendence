@@ -74,7 +74,7 @@ class StudentAttendanceReport extends Page implements HasTable
                             ->searchable(),
                     ])
                     ->query(function ($query, array $data) {
-                        $this->selectedStudentId = $data['student_id'] ?? null;
+                        $this->selectedStudentId = array_key_exists('student_id', $data) ? $data['student_id'] : $this->selectedStudentId;
                         return $query->when($this->selectedStudentId, fn ($q) => $q->where('student_id', $this->selectedStudentId));
                     }),
 
@@ -85,11 +85,11 @@ class StudentAttendanceReport extends Page implements HasTable
                         DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
                     ])
                     ->query(function ($query, array $data) {
-                        $this->startDate = $data['start_date'] ?? null;
-                        $this->endDate = $data['end_date'] ?? null;
+                        $this->startDate = array_key_exists('start_date', $data) ? $data['start_date'] : $this->startDate;
+                        $this->endDate = array_key_exists('end_date', $data) ? $data['end_date'] : $this->endDate;
                         return $query
-                            ->when($data['start_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '>=', $date))
-                            ->when($data['end_date'] ?? null, fn ($q, $date) => $q->whereDate('date', '<=', $date));
+                            ->when($this->startDate, fn ($q, $date) => $q->whereDate('date', '>=', $date))
+                            ->when($this->endDate, fn ($q, $date) => $q->whereDate('date', '<=', $date));
                     }),
             ])
             ->defaultSort('date', 'desc')
