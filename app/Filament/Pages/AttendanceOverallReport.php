@@ -116,6 +116,7 @@ class AttendanceOverallReport extends Page implements HasTable
                     }),
             ])
             ->defaultSort('employee_id')
+            ->defaultKeySort(false)
             ->striped();
     }
 
