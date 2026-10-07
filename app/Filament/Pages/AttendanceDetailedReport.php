@@ -18,6 +18,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
@@ -33,6 +34,8 @@ class AttendanceDetailedReport extends Page implements HasTable
     public ?string $startDate = null;
     public ?string $endDate = null;
 
+    protected ?Collection $employeeNamesCache = null;
+
     public function mount(): void
     {
         $this->startDate = now()->startOfMonth()->format('Y-m-d');
@@ -44,6 +47,11 @@ class AttendanceDetailedReport extends Page implements HasTable
         return $table
             ->query($this->getFilteredTableQuery())
             ->columns([
+                TextColumn::make('employee_id')
+                    ->label('المعلم/ة')
+                    ->formatStateUsing(fn ($state) => $this->employeeNames()->get($state) ?? $state)
+                    ->sortable(),
+
                 TextColumn::make('date')
                     ->label('التاريخ')
                     ->date('Y-m-d')
@@ -218,6 +226,13 @@ class AttendanceDetailedReport extends Page implements HasTable
             'startDate' => $this->startDate,
             'endDate' => $this->endDate,
         ]);
+    }
+
+    protected function employeeNames(): Collection
+    {
+        return $this->employeeNamesCache ??= Employee::query()
+            ->teachers()
+            ->pluck('name', 'id');
     }
 
     public function getFilteredTableQuery(): Builder
