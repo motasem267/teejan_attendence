@@ -9,12 +9,15 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -26,13 +29,16 @@ use UnitEnum;
  * الموظفين بالضبط، بس مصدر البيانات DailyTeacherReceptionAttendance
  * وقائمة الأسماء Employee::teachers().
  */
-class TeacherReceptionAttendanceReport extends Page implements HasTable
+class TeacherReceptionAttendanceReport extends Page implements HasForms, HasTable
 {
+    use InteractsWithForms;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = \Filament\Support\Icons\Heroicon::OutlinedClock;
     protected static ?string $navigationLabel = 'تقرير حضور المعلمين (الاستقبال)';
     protected static string|UnitEnum|null $navigationGroup = null;
+
+    public ?array $data = [];
 
     public ?string $selectedEmployeeId = null;
     public ?string $startDate = null;
@@ -42,8 +48,50 @@ class TeacherReceptionAttendanceReport extends Page implements HasTable
 
     public function mount(): void
     {
-        $this->startDate = now()->startOfMonth()->format('Y-m-d');
-        $this->endDate = now()->format('Y-m-d');
+        $this->form->fill();
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema
+            ->schema([
+                Grid::make(3)
+                    ->schema([
+                        Select::make('employee_id')
+                            ->label('المعلم/ة')
+                            ->options(fn () => $this->teacherNames())
+                            ->searchable()
+                            ->placeholder('كل المعلمين'),
+
+                        DatePicker::make('start_date')
+                            ->label('من تاريخ'),
+
+                        DatePicker::make('end_date')
+                            ->label('إلى تاريخ'),
+                    ]),
+            ])
+            ->statePath('data');
+    }
+
+    public function search(): void
+    {
+        $state = $this->form->getState();
+
+        $this->selectedEmployeeId = $state['employee_id'] ?? null;
+        $this->startDate = $state['start_date'] ?? null;
+        $this->endDate = $state['end_date'] ?? null;
+
+        $this->resetTable();
+    }
+
+    public function resetSearch(): void
+    {
+        $this->form->fill();
+        $this->selectedEmployeeId = null;
+        $this->startDate = null;
+        $this->endDate = null;
+
+        $this->resetTable();
     }
 
     public function table(Table $table): Table
@@ -68,34 +116,6 @@ class TeacherReceptionAttendanceReport extends Page implements HasTable
                     ->label('آخر خروج')
                     ->dateTime('H:i')
                     ->placeholder('-'),
-            ])
-            ->filters([
-                Filter::make('employee_filter')
-                    ->label('اختر المعلم/ة')
-                    ->form([
-                        Select::make('employee_id')
-                            ->label('المعلم/ة')
-                            ->options(fn () => $this->teacherNames())
-                            ->searchable(),
-                    ])
-                    ->query(function ($query, array $data) {
-                        $this->selectedEmployeeId = array_key_exists('employee_id', $data) ? $data['employee_id'] : $this->selectedEmployeeId;
-                        return $query->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId));
-                    }),
-
-                Filter::make('date_range')
-                    ->label('نطاق التاريخ')
-                    ->form([
-                        DatePicker::make('start_date')->label('من التاريخ')->default(fn () => $this->startDate),
-                        DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
-                    ])
-                    ->query(function ($query, array $data) {
-                        $this->startDate = array_key_exists('start_date', $data) ? $data['start_date'] : $this->startDate;
-                        $this->endDate = array_key_exists('end_date', $data) ? $data['end_date'] : $this->endDate;
-                        return $query
-                            ->when($this->startDate, fn ($q, $date) => $q->whereDate('date', '>=', $date))
-                            ->when($this->endDate, fn ($q, $date) => $q->whereDate('date', '<=', $date));
-                    }),
             ])
             ->defaultSort('date', 'desc')
             ->striped();
@@ -153,6 +173,8 @@ class TeacherReceptionAttendanceReport extends Page implements HasTable
                         ->title('تمت إضافة السجل')
                         ->success()
                         ->send();
+
+                    $this->resetTable();
                 }),
         ];
     }
@@ -167,9 +189,11 @@ class TeacherReceptionAttendanceReport extends Page implements HasTable
 
     public function getFilteredTableQuery(): Builder
     {
-        // الفلترة (المعلم + نطاق التاريخ) تتعمل من جوا ->query() متاع كل Filter
-        // نفسه — تكرارها هنا يخلق فلترة مزدوجة بقيمة قديمة لـ $this->startDate.
-        return DailyTeacherReceptionAttendance::query()->orderBy('date', 'desc');
+        return DailyTeacherReceptionAttendance::query()
+            ->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId))
+            ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
+            ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
+            ->orderBy('date', 'desc');
     }
 
     public function getView(): string

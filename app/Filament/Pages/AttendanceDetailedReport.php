@@ -10,25 +10,31 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
-class AttendanceDetailedReport extends Page implements HasTable
+class AttendanceDetailedReport extends Page implements HasForms, HasTable
 {
+    use InteractsWithForms;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = \Filament\Support\Icons\Heroicon::OutlinedDocumentText;
     protected static ?string $navigationLabel = 'تقرير حضور المعلمين التفصيلي';
     protected static string|UnitEnum|null $navigationGroup = null;
+
+    public ?array $data = [];
 
     public ?string $selectedEmployeeId = null;
     public ?string $startDate = null;
@@ -38,8 +44,50 @@ class AttendanceDetailedReport extends Page implements HasTable
 
     public function mount(): void
     {
-        $this->startDate = now()->startOfMonth()->format('Y-m-d');
-        $this->endDate = now()->format('Y-m-d');
+        $this->form->fill();
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema
+            ->schema([
+                Grid::make(3)
+                    ->schema([
+                        Select::make('employee_id')
+                            ->label('المعلم/ة')
+                            ->options(fn () => $this->employeeNames())
+                            ->searchable()
+                            ->placeholder('كل المعلمين'),
+
+                        DatePicker::make('start_date')
+                            ->label('من تاريخ'),
+
+                        DatePicker::make('end_date')
+                            ->label('إلى تاريخ'),
+                    ]),
+            ])
+            ->statePath('data');
+    }
+
+    public function search(): void
+    {
+        $state = $this->form->getState();
+
+        $this->selectedEmployeeId = $state['employee_id'] ?? null;
+        $this->startDate = $state['start_date'] ?? null;
+        $this->endDate = $state['end_date'] ?? null;
+
+        $this->resetTable();
+    }
+
+    public function resetSearch(): void
+    {
+        $this->form->fill();
+        $this->selectedEmployeeId = null;
+        $this->startDate = null;
+        $this->endDate = null;
+
+        $this->resetTable();
     }
 
     public function table(Table $table): Table
@@ -93,37 +141,6 @@ class AttendanceDetailedReport extends Page implements HasTable
                     ->formatStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('H:i') : '-')
                     ->sortable(),
             ])
-            ->filters([
-                Filter::make('employee_filter')
-                    ->label('اختر المعلم/ة')
-                    ->form([
-                        Select::make('employee_id')
-                            ->label('المعلم/ة')
-                            ->options(fn () => Employee::query()
-                                ->teachers()
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->searchable(),
-                    ])
-                    ->query(function ($query, array $data) {
-                        $this->selectedEmployeeId = array_key_exists('employee_id', $data) ? $data['employee_id'] : $this->selectedEmployeeId;
-                        return $query->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId));
-                    }),
-
-                Filter::make('date_range')
-                    ->label('نطاق التاريخ')
-                    ->form([
-                        DatePicker::make('start_date')->label('من التاريخ')->default(fn () => $this->startDate),
-                        DatePicker::make('end_date')->label('إلى التاريخ')->default(fn () => $this->endDate),
-                    ])
-                    ->query(function ($query, array $data) {
-                        $this->startDate = array_key_exists('start_date', $data) ? $data['start_date'] : $this->startDate;
-                        $this->endDate = array_key_exists('end_date', $data) ? $data['end_date'] : $this->endDate;
-                        return $query
-                            ->when($this->startDate, fn ($q, $date) => $q->whereDate('date', '>=', $date))
-                            ->when($this->endDate, fn ($q, $date) => $q->whereDate('date', '<=', $date));
-                    }),
-            ])
             ->defaultSort('date', 'desc')
             ->striped();
     }
@@ -143,10 +160,7 @@ class AttendanceDetailedReport extends Page implements HasTable
                 ->form([
                     Select::make('employee_id')
                         ->label('المعلم/ة')
-                        ->options(fn () => Employee::query()
-                            ->teachers()
-                            ->orderBy('name')
-                            ->pluck('name', 'id'))
+                        ->options(fn () => $this->employeeNames())
                         ->searchable()
                         ->required(),
 
@@ -211,6 +225,8 @@ class AttendanceDetailedReport extends Page implements HasTable
                         ->title('تمت إضافة السجل')
                         ->success()
                         ->send();
+
+                    $this->resetTable();
                 }),
         ];
     }
@@ -237,11 +253,10 @@ class AttendanceDetailedReport extends Page implements HasTable
 
     public function getFilteredTableQuery(): Builder
     {
-        // الفلترة الفعلية (المعلم + نطاق التاريخ) تتعمل من جوا ->query() متاع
-        // كل Filter نفسه، مش هنا — تطبيقها هنا زادة يخلق فلترة مزدوجة متضاربة
-        // (قيمة $this->startDate وقت بناء هذا الكويري القاعدي لسه قديمة، قبل
-        // ما الـ Filter يحدثها بالقيمة الجديدة المختارة).
         return DailyClassAttendance::query()
+            ->when($this->selectedEmployeeId, fn ($q) => $q->where('employee_id', $this->selectedEmployeeId))
+            ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
+            ->when($this->endDate, fn ($q) => $q->whereDate('date', '<=', $this->endDate))
             ->orderBy('date', 'desc')
             ->orderBy('start_time', 'desc');
     }
