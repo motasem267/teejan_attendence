@@ -66,25 +66,26 @@ class AttendanceOverallReport extends Page implements HasTable
 
                 TextColumn::make('attended_sessions')
                     ->label('حصص الحضور')
+                    ->state(fn ($record) => $record->total_sessions)
                     ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✓ {$state}")
-                    ->color('success')
-                    ->summarize([Sum::make()->label('المجموع')->numeric(locale: 'en')]),
+                    ->color('success'),
 
                 TextColumn::make('absent_sessions')
                     ->label('حصص الغياب')
+                    ->state(fn ($record) => max(0, $this->totalScheduledSessions($record->employee_id) - $record->total_sessions))
                     ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✗ {$state}")
-                    ->color('danger')
-                    ->summarize([Sum::make()->label('المجموع')->numeric(locale: 'en')]),
+                    ->color('danger'),
 
                 TextColumn::make('attendance_percentage')
                     ->label('نسبة الحضور %')
                     ->state(function ($record): string {
-                        $percentage = $record->total_sessions > 0
-                            ? round(($record->attended_sessions / $record->total_sessions) * 100, 1)
+                        $pool = $this->totalScheduledSessions($record->employee_id);
+                        $percentage = $pool > 0
+                            ? round(($record->total_sessions / $pool) * 100, 1)
                             : 0;
 
                         return $percentage . '%';
@@ -135,7 +136,15 @@ class AttendanceOverallReport extends Page implements HasTable
      * ويضربه في عدد الحصص المجدولة لهذا اليوم، للمقارنة الحقيقية مع
      * إجمالي الحصص اللي فعلا احتُسبت (total_sessions).
      */
+    /** @var array<string, int> */
+    protected array $scheduledSessionsCache = [];
+
     protected function totalScheduledSessions(string $teacherId): int
+    {
+        return $this->scheduledSessionsCache[$teacherId] ??= $this->computeTotalScheduledSessions($teacherId);
+    }
+
+    protected function computeTotalScheduledSessions(string $teacherId): int
     {
         $weeklySchedule = SchoolSchedule::query()
             ->whereHas('teacherClass', fn ($q) => $q->where('teacher_id', $teacherId))
@@ -212,14 +221,15 @@ class AttendanceOverallReport extends Page implements HasTable
         // الفلترة الفعلية (المعلم + نطاق التاريخ) تتعمل من جوا ->query() متاع
         // كل Filter نفسه (يشوف أحدث $data مباشرة)، مش هنا — تكرارها هنا يخلق
         // فلترة مزدوجة بقيمة قديمة لـ $this->startDate/selectedEmployeeId.
+        // attended/absent/النسبة كلهم تُحسب توا من وعاء الجدول الدراسي
+        // (totalScheduledSessions) مقابل total_sessions، مش من عمود status —
+        // خلاها الكويري تجيب بس العدد الخام اللي فعلا احتُسب.
         return DailyClassAttendance::query()
             ->whereIn('employee_id', $teacherIds)
             ->selectRaw(
                 'employee_id as id,
                 employee_id,
-                COUNT(*) as total_sessions,
-                SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as attended_sessions,
-                SUM(CASE WHEN status = "completed" THEN 0 ELSE 1 END) as absent_sessions'
+                COUNT(*) as total_sessions'
             )
             ->groupBy('employee_id')
             ->havingRaw('COUNT(*) > 0');
