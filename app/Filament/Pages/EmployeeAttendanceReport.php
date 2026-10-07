@@ -29,7 +29,7 @@ class EmployeeAttendanceReport extends Page implements HasTable
     protected static ?string $navigationLabel = 'تقرير حضور الموظفين';
     protected static string|UnitEnum|null $navigationGroup = null;
 
-    public ?int $selectedEmployeeId = null;
+    public ?string $selectedEmployeeId = null;
     public ?string $startDate = null;
     public ?string $endDate = null;
 
