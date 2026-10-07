@@ -23,7 +23,7 @@ class DailyStudentAttendanceService
         $date = $this->normalizeDate($date);
         $attlog = config('attendance.attlog');
 
-        $studentIds = Student::query()->pluck('id');
+        $studentIds = Student::query()->enrolledActiveYear()->pluck('id');
 
         if ($studentIds->isEmpty()) {
             return [

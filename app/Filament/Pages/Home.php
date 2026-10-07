@@ -58,7 +58,7 @@ class Home extends Page
         $this->presentStudentsCount = DailyStudentAttendance::query()
             ->whereDate('date', $date)
             ->count();
-        $totalStudents = Student::query()->count();
+        $totalStudents = Student::query()->enrolledActiveYear()->count();
         $this->absentStudentsCount = max(0, $totalStudents - $this->presentStudentsCount);
 
         $this->presentEmployeesCount = DailyEmployeeAttendance::query()

@@ -177,6 +177,7 @@ class StudentAttendanceReport extends Page implements HasForms, HasTable
     protected function studentNames(): Collection
     {
         return $this->studentNamesCache ??= Student::query()
+            ->enrolledActiveYear()
             ->orderBy('full_name')
             ->pluck('full_name', 'id');
     }

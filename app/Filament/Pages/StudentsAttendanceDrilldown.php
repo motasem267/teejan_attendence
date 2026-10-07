@@ -49,8 +49,8 @@ class StudentsAttendanceDrilldown extends Page implements HasTable
     public function table(Table $table): Table
     {
         $query = $this->status === 'present'
-            ? Student::query()->whereIn('id', $this->presentIds)
-            : Student::query()->whereNotIn('id', $this->presentIds);
+            ? Student::query()->enrolledActiveYear()->whereIn('id', $this->presentIds)
+            : Student::query()->enrolledActiveYear()->whereNotIn('id', $this->presentIds);
 
         return $table
             ->query($query)

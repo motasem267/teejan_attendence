@@ -2,6 +2,7 @@
 
 namespace App\Services\Attendance;
 
+use App\Models\Resultsys\AcademicYear;
 use App\Models\Resultsys\SchoolSchedule;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
@@ -30,8 +31,11 @@ class TeacherScheduledSessionsService
             return 0;
         }
 
+        $activeYearId = AcademicYear::getActiveId();
+
         $weeklySchedule = SchoolSchedule::query()
-            ->whereHas('teacherClass', fn ($q) => $q->where('teacher_id', $teacherId))
+            ->whereHas('teacherClass', fn ($q) => $q->where('teacher_id', $teacherId)
+                ->when($activeYearId, fn ($q2) => $q2->where('academic_year_id', $activeYearId)))
             ->with('day')
             ->get()
             ->filter(fn (SchoolSchedule $schedule) => $schedule->day !== null)

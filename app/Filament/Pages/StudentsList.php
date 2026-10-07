@@ -22,7 +22,7 @@ class StudentsList extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(Student::query()->with('status'))
+            ->query(Student::query()->enrolledActiveYear()->with('status'))
             ->columns([
                 TextColumn::make('id')
                     ->label('المعرّف')

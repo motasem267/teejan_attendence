@@ -2,6 +2,7 @@
 
 namespace App\Services\Attendance;
 
+use App\Models\Resultsys\AcademicYear;
 use App\Models\Resultsys\SchoolSchedule;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
@@ -19,11 +20,15 @@ class DailyClassAttendanceSnapshotService
     {
         $date = $this->normalizeDate($date);
         $dayOrder = $this->schoolDayOrder($date);
+        $activeYearId = AcademicYear::getActiveId();
 
         $scheduleRows = SchoolSchedule::query()
             ->with(['teacherClass.teacher', 'lessonTime', 'day'])
             ->whereHas('day', function ($query) use ($dayOrder): void {
                 $query->where('day_order', $dayOrder);
+            })
+            ->when($activeYearId, function ($query) use ($activeYearId): void {
+                $query->whereHas('teacherClass', fn ($q) => $q->where('academic_year_id', $activeYearId));
             })
             ->get()
             ->filter(function (SchoolSchedule $schedule): bool {

@@ -45,15 +45,23 @@ class Employee extends Model
     }
 
     /**
-     * المعلمون: يتحددون بالمسمى الوظيفي (معلم/معلمة)، مش بوجود حصص مسندة
-     * فعليا — موظف نوعه "معلم" وبلا حصص لسه يبقى معلم، مش موظف إداري.
+     * قيود الموظف في السنوات الدراسية (resultsys.employee_enrollments) —
+     * المسمى الوظيفي ممكن يتغير من سنة لسنة، فهذا هو مصدر الحقيقة لسنة
+     * بعينها، مش عمود emp_type_id الأساسي في employees.
+     */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(EmployeeEnrollment::class, 'employee_id');
+    }
+
+    /**
+     * المعلمون: يتحددون بالمسمى الوظيفي لسنة التسجيل الفعالة إن وُجدت، وإلا
+     * رجوع للمسمى الأساسي في employees (مثلا سنة جديدة لسه ما تم ترحيل
+     * القيود لها) — باش التقارير ما تفضاش فجأة لمجرد تأخر الترحيل.
      */
     public function scopeTeachers(Builder $query): Builder
     {
-        return $query->whereHas(
-            'employeeType',
-            fn (Builder $q) => $q->where('type_name', 'like', '%معلم%'),
-        );
+        return self::scopeOfType($query, true);
     }
 
     /**
@@ -62,12 +70,30 @@ class Employee extends Model
      */
     public function scopeNonTeachingStaff(Builder $query): Builder
     {
-        return $query
-            ->whereDoesntHave(
-                'employeeType',
-                fn (Builder $q) => $q->where('type_name', 'like', '%معلم%'),
-            )
+        return self::scopeOfType($query, false)
             ->where('name', 'not like', '%ادمن%')
             ->where('name', 'not like', '%admin%');
+    }
+
+    protected static function scopeOfType(Builder $query, bool $teacher): Builder
+    {
+        $isTeacherType = fn (Builder $q) => $q->where('type_name', 'like', '%معلم%');
+        $matchesType = fn (Builder $q) => $teacher ? $isTeacherType($q) : $q->whereNot($isTeacherType);
+
+        $activeYearId = AcademicYear::getActiveId();
+        $activeYearHasEnrollments = $activeYearId
+            && EmployeeEnrollment::where('academic_year_id', $activeYearId)->exists();
+
+        if (! $activeYearHasEnrollments) {
+            return $query->whereHas('employeeType', $matchesType);
+        }
+
+        return $query->where(fn (Builder $q) => $q
+            ->whereHas('enrollments', fn (Builder $e) => $e
+                ->where('academic_year_id', $activeYearId)
+                ->whereHas('employeeType', $matchesType))
+            ->orWhere(fn (Builder $q2) => $q2
+                ->whereDoesntHave('enrollments', fn (Builder $e) => $e->where('academic_year_id', $activeYearId))
+                ->whereHas('employeeType', $matchesType)));
     }
 }
