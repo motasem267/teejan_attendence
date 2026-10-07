@@ -4,10 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Models\DailyClassAttendance;
 use App\Models\Resultsys\Employee;
-use App\Models\Resultsys\SchoolSchedule;
+use App\Services\Attendance\TeacherScheduledSessionsService;
 use BackedEnum;
-use Carbon\CarbonImmutable;
-use Carbon\CarbonPeriod;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -77,7 +75,6 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
         $this->selectedEmployeeId = $state['employee_id'] ?? null;
         $this->startDate = $state['start_date'] ?? null;
         $this->endDate = $state['end_date'] ?? null;
-        $this->scheduledSessionsCache = [];
 
         $this->resetTable();
     }
@@ -88,13 +85,17 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
         $this->selectedEmployeeId = null;
         $this->startDate = null;
         $this->endDate = null;
-        $this->scheduledSessionsCache = [];
 
         $this->resetTable();
     }
 
     public function table(Table $table): Table
     {
+        // محلول مرة وحدة هنا ومستعمل عبر كل الـ closures تحت — عنده cache
+        // داخلي خاص بيه لمدة بناء الجدول هذا بس (مش محفوظ عبر الطلبات).
+        $scheduledSessions = app(TeacherScheduledSessionsService::class);
+        $pool = fn (string $teacherId): int => $scheduledSessions->calculate($teacherId, $this->startDate, $this->endDate);
+
         return $table
             ->query($this->getFilteredTableQuery())
             ->columns([
@@ -105,13 +106,13 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
 
                 TextColumn::make('total_schedule_pool')
                     ->label('إجمالي وعاء الحصص (الجدول الدراسي)')
-                    ->state(fn ($record) => $this->totalScheduledSessions($record->employee_id))
+                    ->state(fn ($record) => $pool($record->employee_id))
                     ->numeric(locale: 'en')
                     ->color('gray')
                     ->summarize([
                         Summarizer::make()
                             ->label('المجموع')
-                            ->using(fn ($query) => $query->get()->sum(fn ($row) => $this->totalScheduledSessions($row->employee_id)))
+                            ->using(fn ($query) => $query->get()->sum(fn ($row) => $pool($row->employee_id)))
                             ->numeric(locale: 'en'),
                     ]),
 
@@ -137,7 +138,7 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
 
                 TextColumn::make('absent_sessions')
                     ->label('حصص الغياب')
-                    ->state(fn ($record) => max(0, $this->totalScheduledSessions($record->employee_id) - $record->total_sessions))
+                    ->state(fn ($record) => max(0, $pool($record->employee_id) - $record->total_sessions))
                     ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✗ {$state}")
@@ -145,16 +146,16 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
                     ->summarize([
                         Summarizer::make()
                             ->label('المجموع')
-                            ->using(fn ($query) => $query->get()->sum(fn ($row) => max(0, $this->totalScheduledSessions($row->employee_id) - $row->total_sessions)))
+                            ->using(fn ($query) => $query->get()->sum(fn ($row) => max(0, $pool($row->employee_id) - $row->total_sessions)))
                             ->numeric(locale: 'en'),
                     ]),
 
                 TextColumn::make('attendance_percentage')
                     ->label('نسبة الحضور %')
-                    ->state(function ($record): string {
-                        $pool = $this->totalScheduledSessions($record->employee_id);
-                        $percentage = $pool > 0
-                            ? round(($record->total_sessions / $pool) * 100, 1)
+                    ->state(function ($record) use ($pool): string {
+                        $teacherPool = $pool($record->employee_id);
+                        $percentage = $teacherPool > 0
+                            ? round(($record->total_sessions / $teacherPool) * 100, 1)
                             : 0;
 
                         return $percentage . '%';
@@ -171,60 +172,6 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
             ->modelLabel('حصة')
             ->pluralModelLabel('الحصص')
             ->striped();
-    }
-
-    /**
-     * إجمالي الحصص المجدولة فعليا للمعلم (من الجدول الدراسي school_schedules)
-     * خلال نطاق التاريخ المختار — يحسب تكرار كل يوم أسبوع داخل النطاق
-     * ويضربه في عدد الحصص المجدولة لهذا اليوم، للمقارنة الحقيقية مع
-     * إجمالي الحصص اللي فعلا احتُسبت (total_sessions).
-     */
-    /** @var array<string, int> */
-    protected array $scheduledSessionsCache = [];
-
-    protected function totalScheduledSessions(string $teacherId): int
-    {
-        return $this->scheduledSessionsCache[$teacherId] ??= $this->computeTotalScheduledSessions($teacherId);
-    }
-
-    protected function computeTotalScheduledSessions(string $teacherId): int
-    {
-        $weeklySchedule = SchoolSchedule::query()
-            ->whereHas('teacherClass', fn ($q) => $q->where('teacher_id', $teacherId))
-            ->with('day')
-            ->get()
-            ->filter(fn (SchoolSchedule $schedule) => $schedule->day !== null)
-            ->groupBy(fn (SchoolSchedule $schedule) => $schedule->day->day_order);
-
-        if ($weeklySchedule->isEmpty() || !$this->startDate || !$this->endDate) {
-            return 0;
-        }
-
-        $dayOccurrences = [];
-        foreach (CarbonPeriod::create($this->startDate, $this->endDate) as $date) {
-            $dayOrder = $this->schoolDayOrder(CarbonImmutable::instance($date));
-            $dayOccurrences[$dayOrder] = ($dayOccurrences[$dayOrder] ?? 0) + 1;
-        }
-
-        $total = 0;
-        foreach ($weeklySchedule as $dayOrder => $schedulesForDay) {
-            $total += $schedulesForDay->count() * ($dayOccurrences[$dayOrder] ?? 0);
-        }
-
-        return $total;
-    }
-
-    protected function schoolDayOrder(CarbonImmutable $date): int
-    {
-        return match ((int) $date->format('N')) {
-            6 => 1,
-            7 => 2,
-            1 => 3,
-            2 => 4,
-            3 => 5,
-            4 => 6,
-            5 => 7,
-        };
     }
 
     protected function employeeNames(): Collection
@@ -247,6 +194,7 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
     public function downloadPdf()
     {
         return redirect()->route('reports.attendance-overall.pdf', [
+            'employeeId' => $this->selectedEmployeeId,
             'startDate' => $this->startDate,
             'endDate' => $this->endDate,
         ]);
@@ -263,8 +211,8 @@ class AttendanceOverallReport extends Page implements HasForms, HasTable
         // تُحل عبر employeeNames() لأنها في اتصال قاعدة بيانات مختلف (resultsys)،
         // ولا يمكن عمل JOIN حقيقي بين قاعدتين منفصلتين.
         // attended/absent/النسبة كلهم تُحسب من وعاء الجدول الدراسي
-        // (totalScheduledSessions) مقابل total_sessions، مش من عمود status —
-        // خلاها الكويري تجيب بس العدد الخام اللي فعلا احتُسب.
+        // (TeacherScheduledSessionsService) مقابل total_sessions، مش من عمود
+        // status — خلاها الكويري تجيب بس العدد الخام اللي فعلا احتُسب.
         return DailyClassAttendance::query()
             ->whereIn('employee_id', $teacherIds)
             ->when($this->startDate, fn ($q) => $q->whereDate('date', '>=', $this->startDate))
