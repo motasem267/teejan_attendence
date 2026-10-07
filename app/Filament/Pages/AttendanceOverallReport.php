@@ -4,7 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\DailyClassAttendance;
 use App\Models\Resultsys\Employee;
+use App\Models\Resultsys\SchoolSchedule;
 use BackedEnum;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonPeriod;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -49,27 +52,33 @@ class AttendanceOverallReport extends Page implements HasTable
                     ->formatStateUsing(fn ($state) => $this->employeeNames()->get($state) ?? '-')
                     ->sortable(),
 
+                TextColumn::make('total_schedule_pool')
+                    ->label('إجمالي وعاء الحصص (الجدول الدراسي)')
+                    ->state(fn ($record) => $this->totalScheduledSessions($record->employee_id))
+                    ->numeric(locale: 'en')
+                    ->color('gray'),
+
                 TextColumn::make('total_sessions')
                     ->label('إجمالي الحصص')
-                    ->numeric()
+                    ->numeric(locale: 'en')
                     ->sortable()
-                    ->summarize([Sum::make()->label('المجموع')]),
+                    ->summarize([Sum::make()->label('المجموع')->numeric(locale: 'en')]),
 
                 TextColumn::make('attended_sessions')
                     ->label('حصص الحضور')
-                    ->numeric()
+                    ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✓ {$state}")
                     ->color('success')
-                    ->summarize([Sum::make()->label('المجموع')]),
+                    ->summarize([Sum::make()->label('المجموع')->numeric(locale: 'en')]),
 
                 TextColumn::make('absent_sessions')
                     ->label('حصص الغياب')
-                    ->numeric()
+                    ->numeric(locale: 'en')
                     ->sortable()
                     ->formatStateUsing(fn ($state) => "✗ {$state}")
                     ->color('danger')
-                    ->summarize([Sum::make()->label('المجموع')]),
+                    ->summarize([Sum::make()->label('المجموع')->numeric(locale: 'en')]),
 
                 TextColumn::make('attendance_percentage')
                     ->label('نسبة الحضور %')
@@ -118,6 +127,52 @@ class AttendanceOverallReport extends Page implements HasTable
             ->defaultSort('employee_id')
             ->defaultKeySort(false)
             ->striped();
+    }
+
+    /**
+     * إجمالي الحصص المجدولة فعليا للمعلم (من الجدول الدراسي school_schedules)
+     * خلال نطاق التاريخ المختار — يحسب تكرار كل يوم أسبوع داخل النطاق
+     * ويضربه في عدد الحصص المجدولة لهذا اليوم، للمقارنة الحقيقية مع
+     * إجمالي الحصص اللي فعلا احتُسبت (total_sessions).
+     */
+    protected function totalScheduledSessions(string $teacherId): int
+    {
+        $weeklySchedule = SchoolSchedule::query()
+            ->whereHas('teacherClass', fn ($q) => $q->where('teacher_id', $teacherId))
+            ->with('day')
+            ->get()
+            ->filter(fn (SchoolSchedule $schedule) => $schedule->day !== null)
+            ->groupBy(fn (SchoolSchedule $schedule) => $schedule->day->day_order);
+
+        if ($weeklySchedule->isEmpty() || !$this->startDate || !$this->endDate) {
+            return 0;
+        }
+
+        $dayOccurrences = [];
+        foreach (CarbonPeriod::create($this->startDate, $this->endDate) as $date) {
+            $dayOrder = $this->schoolDayOrder(CarbonImmutable::instance($date));
+            $dayOccurrences[$dayOrder] = ($dayOccurrences[$dayOrder] ?? 0) + 1;
+        }
+
+        $total = 0;
+        foreach ($weeklySchedule as $dayOrder => $schedulesForDay) {
+            $total += $schedulesForDay->count() * ($dayOccurrences[$dayOrder] ?? 0);
+        }
+
+        return $total;
+    }
+
+    protected function schoolDayOrder(CarbonImmutable $date): int
+    {
+        return match ((int) $date->format('N')) {
+            6 => 1,
+            7 => 2,
+            1 => 3,
+            2 => 4,
+            3 => 5,
+            4 => 6,
+            5 => 7,
+        };
     }
 
     protected function employeeNames(): Collection
